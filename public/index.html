@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watch Together</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Watch Together</h1>
+    <p class="subtitle">친구와 함께 영상을 동시에 시청하세요</p>
+
+    <div class="card-group">
+      <!-- Create Room -->
+      <div class="card">
+        <h2>방 만들기</h2>
+        <form id="create-form">
+          <input type="text" id="create-nickname" placeholder="닉네임" required maxlength="20">
+
+          <!-- Video source tabs -->
+          <div class="tabs">
+            <button type="button" class="tab active" data-tab="url">URL 입력</button>
+            <button type="button" class="tab" data-tab="upload">파일 업로드</button>
+          </div>
+
+          <div id="tab-url" class="tab-content active">
+            <input type="url" id="video-url" placeholder="영상 URL (mp4, webm)">
+          </div>
+
+          <div id="tab-upload" class="tab-content">
+            <label class="file-label" id="file-label">
+              <span>영상 파일 선택 (.mp4, .webm)</span>
+              <input type="file" id="video-file" accept=".mp4,.webm" hidden>
+            </label>
+            <div id="upload-progress" class="progress-wrap" hidden>
+              <div class="progress-bar" id="progress-bar"></div>
+              <span class="progress-text" id="progress-text">0%</span>
+            </div>
+            <div id="upload-status" class="upload-status" hidden></div>
+          </div>
+
+          <button type="submit" id="create-btn">방 만들기</button>
+        </form>
+      </div>
+
+      <!-- Join Room -->
+      <div class="card">
+        <h2>방 참가하기</h2>
+        <form id="join-form">
+          <input type="text" id="join-nickname" placeholder="닉네임" required maxlength="20">
+          <input type="text" id="room-code" placeholder="방 코드 (6자리)" required maxlength="10">
+          <button type="submit">참가하기</button>
+        </form>
+      </div>
+    </div>
+
+    <div id="error-msg" class="error" hidden></div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/main.js"></script>
+</body>
+</html>

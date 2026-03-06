@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watch Together - Room</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="room-container">
+    <!-- Header -->
+    <div class="room-header">
+      <h1>Watch Together</h1>
+      <div class="room-info">
+        <span>방 코드: <strong id="room-id">---</strong></span>
+        <button id="copy-code" title="코드 복사">복사</button>
+        <span id="host-badge" class="badge" hidden>HOST</span>
+      </div>
+    </div>
+
+    <!-- Main content -->
+    <div class="room-body">
+      <!-- Video area -->
+      <div class="video-area">
+        <video id="video-player" playsinline>
+          브라우저가 video 태그를 지원하지 않습니다.
+        </video>
+        <div id="sync-notice" class="sync-notice" hidden>동기화 중...</div>
+      </div>
+
+      <!-- Sidebar -->
+      <div class="sidebar">
+        <h3>참가자 <span id="user-count">0</span>명</h3>
+        <ul id="user-list"></ul>
+
+        <div id="status-area">
+          <p id="status-msg">연결 중...</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/room.js"></script>
+</body>
+</html>
