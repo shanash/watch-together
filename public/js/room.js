@@ -7,6 +7,7 @@ const userList = document.getElementById('user-list');
 const userCount = document.getElementById('user-count');
 const statusMsg = document.getElementById('status-msg');
 const syncNotice = document.getElementById('sync-notice');
+const subToggle = document.getElementById('sub-toggle');
 
 let isHost = false;
 let isSyncing = false; // flag to prevent event loops
@@ -23,7 +24,8 @@ if (!roomId || !nickname || !action) {
 socket.on('connect', () => {
   if (action === 'host') {
     const videoUrl = sessionStorage.getItem('wt-videoUrl');
-    socket.emit('create-room', { nickname, videoUrl });
+    const subtitleUrl = sessionStorage.getItem('wt-subtitleUrl') || null;
+    socket.emit('create-room', { nickname, videoUrl, subtitleUrl });
   } else {
     socket.emit('join-room', { roomId, nickname });
   }
@@ -46,6 +48,10 @@ socket.on('room-created', ({ roomId: id }) => {
 
   updateUserList([nickname], nickname);
   bindHostEvents();
+
+  // Load subtitle if available
+  const subUrl = sessionStorage.getItem('wt-subtitleUrl');
+  if (subUrl) loadSubtitle(subUrl);
 });
 
 // --- Guest: Room Joined ---
@@ -63,6 +69,9 @@ socket.on('room-joined', ({ room, playbackState }) => {
   if (playbackState) {
     applySyncState(playbackState);
   }
+
+  // Load subtitle if available
+  if (room.subtitleUrl) loadSubtitle(room.subtitleUrl);
 });
 
 // --- Sync Events from Host ---
@@ -211,3 +220,50 @@ function removeUser(name) {
   });
   userCount.textContent = userList.children.length;
 }
+
+// === Subtitle Functions ===
+
+function loadSubtitle(url) {
+  fetch(url)
+    .then((res) => {
+      if (!res.ok) throw new Error('자막 다운로드 실패');
+      return res.text();
+    })
+    .then((text) => {
+      const ext = url.split('/').pop().split('.').pop().split('?')[0];
+      const vttText = SubtitleParser.parseSubtitle(text, `sub.${ext}`);
+      const blob = new Blob([vttText], { type: 'text/vtt' });
+      const blobUrl = URL.createObjectURL(blob);
+
+      const track = document.createElement('track');
+      track.kind = 'subtitles';
+      track.label = '한국어';
+      track.srclang = 'ko';
+      track.src = blobUrl;
+      track.default = true;
+      video.appendChild(track);
+
+      const textTrack = video.textTracks[video.textTracks.length - 1];
+      textTrack.mode = 'showing';
+
+      subToggle.hidden = false;
+      subToggle.textContent = '자막 끄기';
+    })
+    .catch((err) => {
+      console.error('Subtitle error:', err);
+      statusMsg.textContent = '자막 로드에 실패했습니다.';
+    });
+}
+
+subToggle.addEventListener('click', () => {
+  if (video.textTracks.length > 0) {
+    const track = video.textTracks[0];
+    if (track.mode === 'showing') {
+      track.mode = 'hidden';
+      subToggle.textContent = '자막 켜기';
+    } else {
+      track.mode = 'showing';
+      subToggle.textContent = '자막 끄기';
+    }
+  }
+});

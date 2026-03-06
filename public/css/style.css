@@ -318,6 +318,18 @@ button:disabled {
   font-weight: bold;
 }
 
+.sub-toggle {
+  padding: 8px;
+  font-size: 0.85rem;
+  background: #333;
+  border-radius: 6px;
+  width: 100%;
+}
+
+.sub-toggle:hover {
+  background: #444;
+}
+
 #status-area {
   margin-top: auto;
   padding-top: 16px;

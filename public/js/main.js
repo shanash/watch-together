@@ -17,9 +17,15 @@ const progressBar = document.getElementById('progress-bar');
 const progressText = document.getElementById('progress-text');
 const uploadStatus = document.getElementById('upload-status');
 
+// Subtitle elements
+const subFileInput = document.getElementById('sub-file');
+const subUploadStatus = document.getElementById('sub-upload-status');
+
 let activeTab = 'url';
 let uploadedUrl = null;
+let subtitleUploadedUrl = null;
 let isUploading = false;
+let ffmpegLoaded = null;
 
 const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
 
@@ -27,6 +33,50 @@ function showError(msg) {
   errorMsg.textContent = msg;
   errorMsg.hidden = false;
   setTimeout(() => { errorMsg.hidden = true; }, 4000);
+}
+
+// --- ffmpeg.wasm MKV → MP4 conversion ---
+async function loadFFmpeg() {
+  if (ffmpegLoaded) return ffmpegLoaded;
+
+  const ffmpegMod = await import('https://esm.sh/@ffmpeg/ffmpeg@0.12.10');
+  const utilMod = await import('https://esm.sh/@ffmpeg/util@0.12.1');
+
+  const ffmpeg = new ffmpegMod.FFmpeg();
+  const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
+
+  await ffmpeg.load({
+    coreURL: await utilMod.toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+    wasmURL: await utilMod.toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+  });
+
+  ffmpegLoaded = { ffmpeg, fetchFile: utilMod.fetchFile };
+  return ffmpegLoaded;
+}
+
+async function convertMkvToMp4(file) {
+  uploadProgress.hidden = false;
+  progressBar.style.width = '0%';
+  progressText.textContent = '변환 도구 로딩 중...';
+
+  const { ffmpeg, fetchFile } = await loadFFmpeg();
+
+  progressText.textContent = 'MKV → MP4 변환 중...';
+
+  ffmpeg.on('progress', ({ progress }) => {
+    const pct = Math.max(0, Math.min(100, Math.round(progress * 100)));
+    progressBar.style.width = `${pct}%`;
+    progressText.textContent = `변환 중... ${pct}%`;
+  });
+
+  await ffmpeg.writeFile('input.mkv', await fetchFile(file));
+  await ffmpeg.exec(['-i', 'input.mkv', '-c', 'copy', 'output.mp4']);
+  const data = await ffmpeg.readFile('output.mp4');
+
+  await ffmpeg.deleteFile('input.mkv');
+  await ffmpeg.deleteFile('output.mp4');
+
+  return new File([data], file.name.replace(/\.mkv$/i, '.mp4'), { type: 'video/mp4' });
 }
 
 // --- Tab switching ---
@@ -42,7 +92,7 @@ tabs.forEach((tab) => {
 });
 
 // --- File selection ---
-videoFileInput.addEventListener('change', () => {
+videoFileInput.addEventListener('change', async () => {
   const file = videoFileInput.files[0];
   if (!file) return;
 
@@ -56,8 +106,25 @@ videoFileInput.addEventListener('change', () => {
   uploadedUrl = null;
   uploadStatus.hidden = true;
 
-  // Start upload immediately
-  uploadFile(file);
+  const ext = file.name.split('.').pop().toLowerCase();
+
+  if (ext === 'mkv') {
+    try {
+      isUploading = true;
+      createBtn.disabled = true;
+      const mp4File = await convertMkvToMp4(file);
+      progressBar.style.width = '0%';
+      progressText.textContent = '0%';
+      uploadFile(mp4File);
+    } catch (err) {
+      showError('MKV 변환 실패: ' + err.message);
+      isUploading = false;
+      createBtn.disabled = false;
+      uploadProgress.hidden = true;
+    }
+  } else {
+    uploadFile(file);
+  }
 });
 
 // --- Upload file via Presigned URL ---
@@ -125,6 +192,61 @@ async function uploadFile(file) {
   }
 }
 
+// --- Subtitle file selection & upload ---
+subFileInput.addEventListener('change', () => {
+  const file = subFileInput.files[0];
+  if (!file) return;
+  uploadSubtitleFile(file);
+});
+
+async function uploadSubtitleFile(file) {
+  subUploadStatus.hidden = true;
+  subtitleUploadedUrl = null;
+
+  try {
+    // Read and decode (handle EUC-KR for Korean smi files)
+    const buffer = await file.arrayBuffer();
+    let text = new TextDecoder('utf-8').decode(buffer);
+    if (text.includes('\uFFFD')) {
+      try { text = new TextDecoder('euc-kr').decode(buffer); } catch {}
+    }
+
+    // Get presigned URL
+    const res = await fetch('/api/presign-subtitle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error);
+    }
+
+    const { presignedUrl, publicUrl } = await res.json();
+
+    // Upload decoded text as UTF-8
+    const putRes = await fetch(presignedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'text/plain' },
+      body: new Blob([text], { type: 'text/plain' }),
+    });
+
+    if (!putRes.ok) throw new Error('자막 업로드 실패');
+
+    subtitleUploadedUrl = publicUrl;
+    subUploadStatus.textContent = '자막 업로드 완료!';
+    subUploadStatus.className = 'upload-status success';
+    subUploadStatus.hidden = false;
+  } catch (err) {
+    showError(err.message);
+    subUploadStatus.textContent = '자막 업로드 실패';
+    subUploadStatus.className = 'upload-status fail';
+    subUploadStatus.hidden = false;
+    subtitleUploadedUrl = null;
+  }
+}
+
 // --- Create Room ---
 createForm.addEventListener('submit', (e) => {
   e.preventDefault();
@@ -150,7 +272,7 @@ createForm.addEventListener('submit', (e) => {
     videoUrl = uploadedUrl;
   }
 
-  socket.emit('create-room', { nickname, videoUrl });
+  socket.emit('create-room', { nickname, videoUrl, subtitleUrl: subtitleUploadedUrl });
 });
 
 // --- Join Room ---
@@ -181,6 +303,7 @@ socket.on('room-created', ({ roomId }) => {
   sessionStorage.setItem('wt-roomId', roomId);
   sessionStorage.setItem('wt-nickname', nickname);
   sessionStorage.setItem('wt-videoUrl', videoUrl);
+  sessionStorage.setItem('wt-subtitleUrl', subtitleUploadedUrl || '');
   window.location.href = '/room.html';
 });
 

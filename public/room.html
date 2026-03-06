@@ -33,6 +33,8 @@
         <h3>참가자 <span id="user-count">0</span>명</h3>
         <ul id="user-list"></ul>
 
+        <button id="sub-toggle" class="sub-toggle" hidden>자막 끄기</button>
+
         <div id="status-area">
           <p id="status-msg">연결 중...</p>
         </div>
@@ -41,6 +43,7 @@
   </div>
 
   <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/subtitle-parser.js"></script>
   <script src="/js/room.js"></script>
 </body>
 </html>

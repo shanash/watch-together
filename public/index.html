@@ -30,8 +30,8 @@
 
           <div id="tab-upload" class="tab-content">
             <label class="file-label" id="file-label">
-              <span>영상 파일 선택 (.mp4, .webm)</span>
-              <input type="file" id="video-file" accept=".mp4,.webm" hidden>
+              <span>영상 파일 선택 (.mp4, .webm, .mkv)</span>
+              <input type="file" id="video-file" accept=".mp4,.webm,.mkv" hidden>
             </label>
             <div id="upload-progress" class="progress-wrap" hidden>
               <div class="progress-bar" id="progress-bar"></div>
@@ -39,6 +39,13 @@
             </div>
             <div id="upload-status" class="upload-status" hidden></div>
           </div>
+
+          <!-- Subtitle (optional) -->
+          <label class="file-label" id="sub-file-label">
+            <span>자막 파일 선택 (.smi, .srt, .vtt)</span>
+            <input type="file" id="sub-file" accept=".smi,.srt,.vtt" hidden>
+          </label>
+          <div id="sub-upload-status" class="upload-status" hidden></div>
 
           <button type="submit" id="create-btn">방 만들기</button>
         </form>

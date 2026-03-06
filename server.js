@@ -21,7 +21,8 @@ app.use(express.json());
 app.use(express.static(join(__dirname, 'public')));
 
 // --- Upload: Presigned URL ---
-const ALLOWED_EXTS = new Set(['.mp4', '.webm']);
+const ALLOWED_EXTS = new Set(['.mp4', '.webm', '.mkv']);
+const ALLOWED_SUB_EXTS = new Set(['.smi', '.srt', '.vtt']);
 
 app.post('/api/presign', async (req, res) => {
   try {
@@ -44,6 +45,28 @@ app.post('/api/presign', async (req, res) => {
   }
 });
 
+// --- Subtitle: Presigned URL ---
+app.post('/api/presign-subtitle', async (req, res) => {
+  try {
+    const { filename } = req.body;
+    if (!filename) {
+      return res.status(400).json({ error: '파일명이 필요합니다.' });
+    }
+
+    const ext = extname(filename).toLowerCase();
+    if (!ALLOWED_SUB_EXTS.has(ext)) {
+      return res.status(400).json({ error: 'smi, srt, vtt 파일만 업로드할 수 있습니다.' });
+    }
+
+    const key = `subs/${nanoid(10)}${ext}`;
+    const result = await generatePresignedUrl(key, 'text/plain');
+    res.json(result);
+  } catch (err) {
+    console.error('Subtitle presign error:', err);
+    res.status(500).json({ error: '자막 업로드 URL 생성에 실패했습니다.' });
+  }
+});
+
 // In-memory room storage
 const rooms = new Map();
 
@@ -55,11 +78,12 @@ io.on('connection', (socket) => {
   console.log(`Connected: ${socket.id}`);
 
   // --- Create Room ---
-  socket.on('create-room', ({ nickname, videoUrl }) => {
+  socket.on('create-room', ({ nickname, videoUrl, subtitleUrl }) => {
     const roomId = generateRoomId();
     const room = {
       hostId: socket.id,
       videoUrl,
+      subtitleUrl: subtitleUrl || null,
       users: [{ id: socket.id, nickname }],
       playbackState: {
         currentTime: 0,
@@ -92,6 +116,7 @@ io.on('connection', (socket) => {
     socket.emit('room-joined', {
       room: {
         videoUrl: room.videoUrl,
+        subtitleUrl: room.subtitleUrl,
         users: room.users.map((u) => u.nickname),
         hostNickname: room.users.find((u) => u.id === room.hostId)?.nickname,
         isHost: false,
