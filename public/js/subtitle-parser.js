@@ -20,7 +20,7 @@
 
   function parseSMI(text) {
     const cues = [];
-    const syncRe = /<SYNC\s+Start\s*=\s*(\d+)\s*>/gi;
+    const syncRe = /<SYNC\s+Start\s*=\s*"?(\d+)"?\s*>/gi;
     const syncs = [];
     let m;
     while ((m = syncRe.exec(text)) !== null) {

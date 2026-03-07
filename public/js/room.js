@@ -224,7 +224,10 @@ function removeUser(name) {
 // === Subtitle Functions ===
 
 function loadSubtitle(url) {
-  fetch(url)
+  // Proxy through our server to avoid CORS issues with R2
+  const proxyUrl = `/api/subtitle-proxy?url=${encodeURIComponent(url)}`;
+
+  fetch(proxyUrl)
     .then((res) => {
       if (!res.ok) throw new Error('자막 다운로드 실패');
       return res.text();
@@ -235,19 +238,36 @@ function loadSubtitle(url) {
       const blob = new Blob([vttText], { type: 'text/vtt' });
       const blobUrl = URL.createObjectURL(blob);
 
-      const track = document.createElement('track');
-      track.kind = 'subtitles';
-      track.label = '한국어';
-      track.srclang = 'ko';
-      track.src = blobUrl;
-      track.default = true;
-      video.appendChild(track);
+      function addTrack() {
+        // Remove existing tracks
+        const oldTracks = video.querySelectorAll('track');
+        oldTracks.forEach((t) => t.remove());
 
-      const textTrack = video.textTracks[video.textTracks.length - 1];
-      textTrack.mode = 'showing';
+        const track = document.createElement('track');
+        track.kind = 'subtitles';
+        track.label = '한국어';
+        track.srclang = 'ko';
+        track.src = blobUrl;
+        track.default = true;
+        video.appendChild(track);
 
-      subToggle.hidden = false;
-      subToggle.textContent = '자막 끄기';
+        // Ensure track mode is set after a brief delay for browser to register
+        setTimeout(() => {
+          if (video.textTracks.length > 0) {
+            video.textTracks[0].mode = 'showing';
+          }
+        }, 100);
+
+        subToggle.hidden = false;
+        subToggle.textContent = '자막 끄기';
+      }
+
+      // Add track after video has metadata, or immediately if already loaded
+      if (video.readyState >= 1) {
+        addTrack();
+      } else {
+        video.addEventListener('loadedmetadata', addTrack, { once: true });
+      }
     })
     .catch((err) => {
       console.error('Subtitle error:', err);

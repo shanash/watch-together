@@ -71,6 +71,32 @@ app.post('/api/presign-subtitle', async (req, res) => {
   }
 });
 
+// --- Subtitle Proxy (avoid CORS issues when fetching from R2) ---
+app.get('/api/subtitle-proxy', async (req, res) => {
+  try {
+    const { url } = req.query;
+    if (!url) {
+      return res.status(400).json({ error: 'URL이 필요합니다.' });
+    }
+
+    const publicBase = process.env.R2_PUBLIC_URL;
+    if (!publicBase || !url.startsWith(publicBase)) {
+      return res.status(403).json({ error: '허용되지 않는 URL입니다.' });
+    }
+
+    const response = await fetch(url);
+    if (!response.ok) {
+      return res.status(response.status).json({ error: '자막 다운로드 실패' });
+    }
+
+    const text = await response.text();
+    res.type('text/plain; charset=utf-8').send(text);
+  } catch (err) {
+    console.error('Subtitle proxy error:', err);
+    res.status(500).json({ error: '자막 프록시 오류' });
+  }
+});
+
 // In-memory room storage
 const rooms = new Map();
 
