@@ -36,25 +36,35 @@ function showError(msg) {
 }
 
 // --- ffmpeg.wasm MKV → MP4 conversion ---
+function loadScript(src) {
+  return new Promise((resolve, reject) => {
+    const s = document.createElement('script');
+    s.src = src;
+    s.onload = resolve;
+    s.onerror = reject;
+    document.head.appendChild(s);
+  });
+}
+
 async function loadFFmpeg() {
   if (ffmpegLoaded) return ffmpegLoaded;
 
-  const ffmpegMod = await import('https://esm.sh/@ffmpeg/ffmpeg@0.12.10');
-  const utilMod = await import('https://esm.sh/@ffmpeg/util@0.12.1');
+  // Load UMD builds from same-origin (avoids cross-origin Worker error)
+  await loadScript('/ffmpeg/ffmpeg.js');
+  await loadScript('/ffmpeg-util/index.js');
 
-  const ffmpeg = new ffmpegMod.FFmpeg();
+  const { FFmpeg } = FFmpegWASM;
+  const { fetchFile, toBlobURL } = FFmpegUtil;
+
+  const ffmpeg = new FFmpeg();
   const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
 
   await ffmpeg.load({
-    coreURL: await utilMod.toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
-    wasmURL: await utilMod.toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
-    workerURL: await utilMod.toBlobURL(
-      'https://esm.sh/@ffmpeg/ffmpeg@0.12.10/es2022/worker.js',
-      'text/javascript'
-    ),
+    coreURL: await toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
+    wasmURL: await toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
   });
 
-  ffmpegLoaded = { ffmpeg, fetchFile: utilMod.fetchFile };
+  ffmpegLoaded = { ffmpeg, fetchFile };
   return ffmpegLoaded;
 }
 

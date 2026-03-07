@@ -20,6 +20,10 @@ const io = new Server(server);
 app.use(express.json());
 app.use(express.static(join(__dirname, 'public')));
 
+// Serve ffmpeg.wasm UMD files from node_modules (same-origin for Worker)
+app.use('/ffmpeg', express.static(join(__dirname, 'node_modules/@ffmpeg/ffmpeg/dist/umd')));
+app.use('/ffmpeg-util', express.static(join(__dirname, 'node_modules/@ffmpeg/util/dist/umd')));
+
 // --- Upload: Presigned URL ---
 const ALLOWED_EXTS = new Set(['.mp4', '.webm', '.mkv']);
 const ALLOWED_SUB_EXTS = new Set(['.smi', '.srt', '.vtt']);
