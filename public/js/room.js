@@ -166,6 +166,26 @@ function bindHostEvents() {
   });
 }
 
+// --- Keyboard Controls (Host only) ---
+document.addEventListener('keydown', (e) => {
+  if (!isHost) return;
+
+  if (e.code === 'Space') {
+    e.preventDefault();
+    if (video.paused) {
+      video.play();
+    } else {
+      video.pause();
+    }
+  } else if (e.code === 'ArrowLeft') {
+    e.preventDefault();
+    video.currentTime = Math.max(0, video.currentTime - 5);
+  } else if (e.code === 'ArrowRight') {
+    e.preventDefault();
+    video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 5);
+  }
+});
+
 function applySyncState(state) {
   isSyncing = true;
 
