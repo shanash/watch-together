@@ -19,24 +19,26 @@
   }
 
   function parseSMI(text) {
+    text = text.replace(/\r\n/g, '\n');
     const cues = [];
     const syncRe = /<SYNC\s+Start\s*=\s*"?(\d+)"?\s*>/gi;
     const syncs = [];
     let m;
     while ((m = syncRe.exec(text)) !== null) {
-      syncs.push({ time: parseInt(m[1], 10), idx: m.index + m[0].length });
+      syncs.push({ time: parseInt(m[1], 10), start: m.index, idx: m.index + m[0].length });
     }
 
     for (let i = 0; i < syncs.length; i++) {
       const endIdx = i + 1 < syncs.length
-        ? text.lastIndexOf('<SYNC', syncs[i + 1].idx)
+        ? syncs[i + 1].start
         : text.length;
       let content = text.substring(syncs[i].idx, endIdx).trim();
 
       content = content.replace(/<P[^>]*>/gi, '').replace(/<\/P>/gi, '');
       content = content.replace(/<br\s*\/?>/gi, '\n');
       content = content.replace(/<[^>]+>/g, '');
-      content = content.replace(/&nbsp;/gi, '').trim();
+      content = content.replace(/&nbsp;/gi, '');
+      content = content.replace(/\n{2,}/g, '\n').trim();
 
       if (!content) continue;
 
