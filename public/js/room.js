@@ -47,7 +47,7 @@ socket.on('room-created', ({ roomId: id }) => {
   video.controls = true;
 
   updateUserList([nickname], nickname);
-  bindHostEvents();
+  bindSyncEvents();
 
   // Load subtitle if available
   const subUrl = sessionStorage.getItem('wt-subtitleUrl');
@@ -61,9 +61,10 @@ socket.on('room-joined', ({ room, playbackState }) => {
   statusMsg.textContent = '방에 참가했습니다.';
 
   video.src = room.videoUrl;
-  video.controls = false; // guests can't control
+  video.controls = true;
 
   updateUserList(room.users, room.hostNickname);
+  bindSyncEvents();
 
   // Apply initial sync state
   if (playbackState) {
@@ -119,7 +120,7 @@ socket.on('host-promoted', () => {
   hostBadge.hidden = false;
   video.controls = true;
   statusMsg.textContent = '호스트 권한이 이전되었습니다. 이제 영상을 제어할 수 있습니다.';
-  bindHostEvents();
+  bindSyncEvents();
 });
 
 socket.on('host-changed', ({ newHostNickname }) => {
@@ -146,30 +147,28 @@ copyCodeBtn.addEventListener('click', () => {
 
 // === Helper Functions ===
 
-function bindHostEvents() {
+function bindSyncEvents() {
   video.addEventListener('play', () => {
-    if (!isSyncing && isHost) {
+    if (!isSyncing) {
       socket.emit('sync-play', { currentTime: video.currentTime });
     }
   });
 
   video.addEventListener('pause', () => {
-    if (!isSyncing && isHost) {
+    if (!isSyncing) {
       socket.emit('sync-pause', { currentTime: video.currentTime });
     }
   });
 
   video.addEventListener('seeked', () => {
-    if (!isSyncing && isHost) {
+    if (!isSyncing) {
       socket.emit('sync-seek', { currentTime: video.currentTime });
     }
   });
 }
 
-// --- Keyboard Controls (Host only) ---
+// --- Keyboard Controls ---
 document.addEventListener('keydown', (e) => {
-  if (!isHost) return;
-
   if (e.code === 'Space') {
     e.preventDefault();
     if (video.paused) {
