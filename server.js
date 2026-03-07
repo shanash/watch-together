@@ -33,7 +33,7 @@ app.post('/api/presign', async (req, res) => {
 
     const ext = extname(filename).toLowerCase();
     if (!ALLOWED_EXTS.has(ext)) {
-      return res.status(400).json({ error: 'mp4, webm 파일만 업로드할 수 있습니다.' });
+      return res.status(400).json({ error: 'mp4, webm, mkv 파일만 업로드할 수 있습니다.' });
     }
 
     const key = `${nanoid(10)}${ext}`;
