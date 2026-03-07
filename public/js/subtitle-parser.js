@@ -34,11 +34,19 @@
         : text.length;
       let content = text.substring(syncs[i].idx, endIdx).trim();
 
+      // Remove <P> tags first
       content = content.replace(/<P[^>]*>/gi, '').replace(/<\/P>/gi, '');
-      content = content.replace(/<br\s*\/?>/gi, '\n');
-      content = content.replace(/<[^>]+>/g, '');
-      content = content.replace(/&nbsp;/gi, '');
-      content = content.replace(/\n{2,}/g, '\n').trim();
+
+      // Split by <BR> tags, then clean each line individually
+      const lines = content.split(/<br\s*\/?>/gi)
+        .map((line) => {
+          line = line.replace(/<[^>]+>/g, '');   // strip all HTML tags
+          line = line.replace(/&nbsp;/gi, '');
+          return line.trim();
+        })
+        .filter(Boolean);
+
+      content = lines.join('\n');
 
       if (!content) continue;
 
