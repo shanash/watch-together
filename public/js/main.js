@@ -48,6 +48,10 @@ async function loadFFmpeg() {
   await ffmpeg.load({
     coreURL: await utilMod.toBlobURL(`${baseURL}/ffmpeg-core.js`, 'text/javascript'),
     wasmURL: await utilMod.toBlobURL(`${baseURL}/ffmpeg-core.wasm`, 'application/wasm'),
+    workerURL: await utilMod.toBlobURL(
+      'https://esm.sh/@ffmpeg/ffmpeg@0.12.10/es2022/worker.js',
+      'text/javascript'
+    ),
   });
 
   ffmpegLoaded = { ffmpeg, fetchFile: utilMod.fetchFile };
