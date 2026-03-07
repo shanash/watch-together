@@ -10,16 +10,45 @@
     return `${h}:${m}:${s}.${ms3}`;
   }
 
-  function buildVTT(cues) {
+  function buildVTT(cues, colors) {
     let vtt = 'WEBVTT\n\n';
+    if (colors && colors.size > 0) {
+      vtt += 'STYLE\n';
+      for (const color of colors) {
+        vtt += `::cue(.c${color}) { color: #${color}; }\n`;
+      }
+      vtt += '\n';
+    }
     for (const cue of cues) {
       vtt += `${cue.start} --> ${cue.end}\n${cue.text}\n\n`;
     }
     return vtt;
   }
 
+  function convertSmiLine(line, colors) {
+    const hasBold = /<b\b/i.test(line);
+    const hasItalic = /<i\b/i.test(line);
+    const fontMatch = line.match(/<font[^>]*color\s*=\s*"?#?([0-9a-f]{3,8})"?[^>]*>/i);
+
+    // Strip all HTML tags and entities
+    let text = line.replace(/<[^>]+>/g, '').replace(/&nbsp;/gi, '').trim();
+    if (!text) return '';
+
+    // Wrap with VTT-compatible tags (innermost to outermost)
+    if (fontMatch) {
+      const color = fontMatch[1].toUpperCase();
+      colors.add(color);
+      text = `<c.c${color}>${text}</c>`;
+    }
+    if (hasItalic) text = `<i>${text}</i>`;
+    if (hasBold) text = `<b>${text}</b>`;
+
+    return text;
+  }
+
   function parseSMI(text) {
     text = text.replace(/\r\n/g, '\n');
+    const colors = new Set();
     const cues = [];
     const syncRe = /<SYNC\s+Start\s*=\s*"?(\d+)"?\s*>/gi;
     const syncs = [];
@@ -37,13 +66,9 @@
       // Remove <P> tags first
       content = content.replace(/<P[^>]*>/gi, '').replace(/<\/P>/gi, '');
 
-      // Split by <BR> tags, then clean each line individually
+      // Split by <BR> tags, then convert each line with styling
       const lines = content.split(/<br\s*\/?>/gi)
-        .map((line) => {
-          line = line.replace(/<[^>]+>/g, '');   // strip all HTML tags
-          line = line.replace(/&nbsp;/gi, '');
-          return line.trim();
-        })
+        .map((line) => convertSmiLine(line, colors))
         .filter(Boolean);
 
       content = lines.join('\n');
@@ -59,7 +84,7 @@
         text: content,
       });
     }
-    return buildVTT(cues);
+    return buildVTT(cues, colors);
   }
 
   function parseSRT(text) {
