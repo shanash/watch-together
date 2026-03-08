@@ -158,11 +158,11 @@ io.on('connection', (socket) => {
     console.log(`${nickname} joined room ${roomId}`);
   });
 
-  // --- Sync Events (any user) ---
+  // --- Sync Events (Host only) ---
   socket.on('sync-play', ({ currentTime }) => {
     const roomId = socket.data.roomId;
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || room.hostId !== socket.id) return;
 
     room.playbackState = {
       currentTime,
@@ -175,7 +175,7 @@ io.on('connection', (socket) => {
   socket.on('sync-pause', ({ currentTime }) => {
     const roomId = socket.data.roomId;
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || room.hostId !== socket.id) return;
 
     room.playbackState = {
       currentTime,
@@ -188,7 +188,7 @@ io.on('connection', (socket) => {
   socket.on('sync-seek', ({ currentTime }) => {
     const roomId = socket.data.roomId;
     const room = rooms.get(roomId);
-    if (!room) return;
+    if (!room || room.hostId !== socket.id) return;
 
     room.playbackState = {
       ...room.playbackState,

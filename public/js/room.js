@@ -61,10 +61,9 @@ socket.on('room-joined', ({ room, playbackState }) => {
   statusMsg.textContent = '방에 참가했습니다.';
 
   video.src = room.videoUrl;
-  video.controls = true;
+  video.controls = false;
 
   updateUserList(room.users, room.hostNickname);
-  bindSyncEvents();
 
   // Apply initial sync state
   if (playbackState) {
@@ -149,26 +148,28 @@ copyCodeBtn.addEventListener('click', () => {
 
 function bindSyncEvents() {
   video.addEventListener('play', () => {
-    if (!isSyncing) {
+    if (!isSyncing && isHost) {
       socket.emit('sync-play', { currentTime: video.currentTime });
     }
   });
 
   video.addEventListener('pause', () => {
-    if (!isSyncing) {
+    if (!isSyncing && isHost) {
       socket.emit('sync-pause', { currentTime: video.currentTime });
     }
   });
 
   video.addEventListener('seeked', () => {
-    if (!isSyncing) {
+    if (!isSyncing && isHost) {
       socket.emit('sync-seek', { currentTime: video.currentTime });
     }
   });
 }
 
-// --- Keyboard Controls ---
+// --- Keyboard Controls (Host only) ---
 document.addEventListener('keydown', (e) => {
+  if (!isHost) return;
+
   if (e.code === 'Space') {
     e.preventDefault();
     if (video.paused) {
