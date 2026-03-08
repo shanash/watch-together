@@ -27,7 +27,7 @@ let subtitleUploadedUrl = null;
 let isUploading = false;
 let ffmpegLoaded = null;
 
-const MAX_FILE_SIZE = 500 * 1024 * 1024; // 500MB
+const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024; // 2GB
 
 function showError(msg) {
   errorMsg.textContent = msg;
@@ -111,7 +111,7 @@ videoFileInput.addEventListener('change', async () => {
   if (!file) return;
 
   if (file.size > MAX_FILE_SIZE) {
-    showError('파일 크기는 500MB 이하여야 합니다.');
+    showError('파일 크기는 2GB 이하여야 합니다.');
     videoFileInput.value = '';
     return;
   }
