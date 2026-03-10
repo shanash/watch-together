@@ -10,7 +10,10 @@ const syncNotice = document.getElementById('sync-notice');
 const subToggle = document.getElementById('sub-toggle');
 
 let isHost = false;
-let isSyncing = false; // flag to prevent event loops
+let syncCooldown = false; // timer-based flag to prevent sync event loops
+let syncCooldownTimer = null;
+let syncEventsBound = false;
+const SYNC_COOLDOWN_MS = 300;
 let roomId = sessionStorage.getItem('wt-roomId');
 let nickname = sessionStorage.getItem('wt-nickname');
 const action = sessionStorage.getItem('wt-action');
@@ -48,6 +51,7 @@ socket.on('room-created', ({ roomId: id }) => {
 
   updateUserList([nickname], nickname);
   bindSyncEvents();
+  bindKeyboardControls();
 
   // Load subtitle if available
   const subUrl = sessionStorage.getItem('wt-subtitleUrl');
@@ -61,9 +65,11 @@ socket.on('room-joined', ({ room, playbackState }) => {
   statusMsg.textContent = '방에 참가했습니다.';
 
   video.src = room.videoUrl;
-  video.controls = false;
+  video.controls = true;
 
   updateUserList(room.users, room.hostNickname);
+  bindSyncEvents();
+  bindKeyboardControls();
 
   // Apply initial sync state
   if (playbackState) {
@@ -74,26 +80,24 @@ socket.on('room-joined', ({ room, playbackState }) => {
   if (room.subtitleUrl) loadSubtitle(room.subtitleUrl);
 });
 
-// --- Sync Events from Host ---
+// --- Sync Events from Others ---
 socket.on('sync-play', ({ currentTime }) => {
-  isSyncing = true;
+  startSyncCooldown();
   video.currentTime = currentTime;
-  video.play().finally(() => { isSyncing = false; });
+  video.play();
   showSyncNotice();
 });
 
 socket.on('sync-pause', ({ currentTime }) => {
-  isSyncing = true;
+  startSyncCooldown();
   video.currentTime = currentTime;
   video.pause();
-  isSyncing = false;
   showSyncNotice();
 });
 
 socket.on('sync-seek', ({ currentTime }) => {
-  isSyncing = true;
+  startSyncCooldown();
   video.currentTime = currentTime;
-  isSyncing = false;
   showSyncNotice();
 });
 
@@ -118,8 +122,9 @@ socket.on('host-promoted', () => {
   isHost = true;
   hostBadge.hidden = false;
   video.controls = true;
-  statusMsg.textContent = '호스트 권한이 이전되었습니다. 이제 영상을 제어할 수 있습니다.';
+  statusMsg.textContent = '호스트 권한이 이전되었습니다.';
   bindSyncEvents();
+  bindKeyboardControls();
 });
 
 socket.on('host-changed', ({ newHostNickname }) => {
@@ -146,48 +151,61 @@ copyCodeBtn.addEventListener('click', () => {
 
 // === Helper Functions ===
 
+function startSyncCooldown() {
+  syncCooldown = true;
+  clearTimeout(syncCooldownTimer);
+  syncCooldownTimer = setTimeout(() => { syncCooldown = false; }, SYNC_COOLDOWN_MS);
+}
+
 function bindSyncEvents() {
+  if (syncEventsBound) return;
+  syncEventsBound = true;
+
   video.addEventListener('play', () => {
-    if (!isSyncing && isHost) {
+    if (!syncCooldown) {
       socket.emit('sync-play', { currentTime: video.currentTime });
     }
   });
 
   video.addEventListener('pause', () => {
-    if (!isSyncing && isHost) {
+    if (!syncCooldown) {
       socket.emit('sync-pause', { currentTime: video.currentTime });
     }
   });
 
   video.addEventListener('seeked', () => {
-    if (!isSyncing && isHost) {
+    if (!syncCooldown) {
       socket.emit('sync-seek', { currentTime: video.currentTime });
     }
   });
 }
 
-// --- Keyboard Controls (Host only) ---
-document.addEventListener('keydown', (e) => {
-  if (!isHost) return;
+// --- Keyboard Controls ---
+let keyboardBound = false;
+function bindKeyboardControls() {
+  if (keyboardBound) return;
+  keyboardBound = true;
 
-  if (e.code === 'Space') {
-    e.preventDefault();
-    if (video.paused) {
-      video.play();
-    } else {
-      video.pause();
+  document.addEventListener('keydown', (e) => {
+    if (e.code === 'Space') {
+      e.preventDefault();
+      if (video.paused) {
+        video.play();
+      } else {
+        video.pause();
+      }
+    } else if (e.code === 'ArrowLeft') {
+      e.preventDefault();
+      video.currentTime = Math.max(0, video.currentTime - 5);
+    } else if (e.code === 'ArrowRight') {
+      e.preventDefault();
+      video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 5);
     }
-  } else if (e.code === 'ArrowLeft') {
-    e.preventDefault();
-    video.currentTime = Math.max(0, video.currentTime - 5);
-  } else if (e.code === 'ArrowRight') {
-    e.preventDefault();
-    video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 5);
-  }
-});
+  });
+}
 
 function applySyncState(state) {
-  isSyncing = true;
+  startSyncCooldown();
 
   // Estimate current time if playing (based on elapsed time since update)
   let targetTime = state.currentTime;
@@ -199,10 +217,9 @@ function applySyncState(state) {
   video.currentTime = targetTime;
 
   if (state.isPlaying) {
-    video.play().finally(() => { isSyncing = false; });
+    video.play();
   } else {
     video.pause();
-    isSyncing = false;
   }
 
   showSyncNotice();
