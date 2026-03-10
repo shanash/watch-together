@@ -311,12 +311,6 @@ button:disabled {
   font-size: 0.9rem;
 }
 
-#user-list li.host::after {
-  content: ' (HOST)';
-  color: #646cff;
-  font-size: 0.75rem;
-  font-weight: bold;
-}
 
 .sub-toggle {
   padding: 8px;

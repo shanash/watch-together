@@ -111,7 +111,6 @@ io.on('connection', (socket) => {
   socket.on('create-room', ({ nickname, videoUrl, subtitleUrl }) => {
     const roomId = generateRoomId();
     const room = {
-      hostId: socket.id,
       videoUrl,
       subtitleUrl: subtitleUrl || null,
       users: [{ id: socket.id, nickname }],
@@ -148,8 +147,6 @@ io.on('connection', (socket) => {
         videoUrl: room.videoUrl,
         subtitleUrl: room.subtitleUrl,
         users: room.users.map((u) => u.nickname),
-        hostNickname: room.users.find((u) => u.id === room.hostId)?.nickname,
-        isHost: false,
       },
       playbackState: room.playbackState,
     });
@@ -224,16 +221,6 @@ io.on('connection', (socket) => {
       rooms.delete(roomId);
       console.log(`Room ${roomId} deleted (empty)`);
       return;
-    }
-
-    // If host left, promote next user
-    if (room.hostId === socket.id) {
-      const newHost = room.users[0];
-      room.hostId = newHost.id;
-
-      io.to(newHost.id).emit('host-promoted', { roomId });
-      socket.to(roomId).emit('host-changed', { newHostNickname: newHost.nickname });
-      console.log(`Host migrated to ${newHost.nickname} in room ${roomId}`);
     }
 
     socket.to(roomId).emit('user-left', { nickname });

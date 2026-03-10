@@ -2,14 +2,12 @@ const socket = io();
 const video = document.getElementById('video-player');
 const roomIdEl = document.getElementById('room-id');
 const copyCodeBtn = document.getElementById('copy-code');
-const hostBadge = document.getElementById('host-badge');
 const userList = document.getElementById('user-list');
 const userCount = document.getElementById('user-count');
 const statusMsg = document.getElementById('status-msg');
 const syncNotice = document.getElementById('sync-notice');
 const subToggle = document.getElementById('sub-toggle');
 
-let isHost = false;
 let syncCooldown = false; // timer-based flag to prevent sync event loops
 let syncCooldownTimer = null;
 let syncEventsBound = false;
@@ -37,11 +35,9 @@ socket.on('connect', () => {
 // --- Host: Room Created ---
 socket.on('room-created', ({ roomId: id }) => {
   roomId = id;
-  isHost = true;
   sessionStorage.setItem('wt-roomId', roomId);
 
   roomIdEl.textContent = roomId;
-  hostBadge.hidden = false;
   statusMsg.textContent = '방이 생성되었습니다. 영상을 재생하세요.';
 
   // Set video source
@@ -49,7 +45,7 @@ socket.on('room-created', ({ roomId: id }) => {
   video.src = videoUrl;
   video.controls = true;
 
-  updateUserList([nickname], nickname);
+  updateUserList([nickname]);
   bindSyncEvents();
   bindKeyboardControls();
 
@@ -60,14 +56,13 @@ socket.on('room-created', ({ roomId: id }) => {
 
 // --- Guest: Room Joined ---
 socket.on('room-joined', ({ room, playbackState }) => {
-  isHost = false;
   roomIdEl.textContent = roomId;
   statusMsg.textContent = '방에 참가했습니다.';
 
   video.src = room.videoUrl;
   video.controls = true;
 
-  updateUserList(room.users, room.hostNickname);
+  updateUserList(room.users);
   bindSyncEvents();
   bindKeyboardControls();
 
@@ -117,23 +112,6 @@ socket.on('user-left', ({ nickname: name }) => {
   statusMsg.textContent = `${name}님이 나갔습니다.`;
 });
 
-// --- Host Migration ---
-socket.on('host-promoted', () => {
-  isHost = true;
-  hostBadge.hidden = false;
-  video.controls = true;
-  statusMsg.textContent = '호스트 권한이 이전되었습니다.';
-  bindSyncEvents();
-  bindKeyboardControls();
-});
-
-socket.on('host-changed', ({ newHostNickname }) => {
-  statusMsg.textContent = `${newHostNickname}님이 새 호스트입니다.`;
-  // Update host marker in user list
-  document.querySelectorAll('#user-list li').forEach((li) => {
-    li.classList.toggle('host', li.textContent === newHostNickname);
-  });
-});
 
 // --- Error ---
 socket.on('error-msg', ({ message }) => {
@@ -230,12 +208,11 @@ function showSyncNotice() {
   setTimeout(() => { syncNotice.hidden = true; }, 1200);
 }
 
-function updateUserList(users, hostNickname) {
+function updateUserList(users) {
   userList.innerHTML = '';
   users.forEach((name) => {
     const li = document.createElement('li');
     li.textContent = name;
-    if (name === hostNickname) li.classList.add('host');
     userList.appendChild(li);
   });
   userCount.textContent = users.length;
@@ -251,7 +228,7 @@ function addUser(name) {
 function removeUser(name) {
   const items = userList.querySelectorAll('li');
   items.forEach((li) => {
-    if (li.textContent === name || li.textContent === name + ' (HOST)') {
+    if (li.textContent === name) {
       li.remove();
     }
   });
