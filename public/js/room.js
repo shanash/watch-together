@@ -119,6 +119,33 @@ socket.on('error-msg', ({ message }) => {
   setTimeout(() => { window.location.href = '/'; }, 2000);
 });
 
+// --- Network Status ---
+const PING_INTERVAL = 5000;
+const SLOW_THRESHOLD = 300; // ms
+
+setInterval(() => {
+  const start = Date.now();
+  socket.volatile.emit('ping-check', () => {
+    const latency = Date.now() - start;
+    socket.emit('network-status', { latency });
+  });
+}, PING_INTERVAL);
+
+socket.on('user-network', ({ nickname: name, latency }) => {
+  const li = [...userList.querySelectorAll('li')].find(
+    (el) => el.dataset.nickname === name
+  );
+  if (!li) return;
+  const icon = li.querySelector('.net-icon');
+  if (latency >= SLOW_THRESHOLD) {
+    icon.textContent = '\u{1F7E1}';
+    icon.title = `지연: ${latency}ms`;
+  } else {
+    icon.textContent = '';
+    icon.title = '';
+  }
+});
+
 // --- Copy Room Code ---
 copyCodeBtn.addEventListener('click', () => {
   navigator.clipboard.writeText(roomId).then(() => {
@@ -208,29 +235,33 @@ function showSyncNotice() {
   setTimeout(() => { syncNotice.hidden = true; }, 1200);
 }
 
+function createUserLi(name) {
+  const li = document.createElement('li');
+  li.dataset.nickname = name;
+  const span = document.createElement('span');
+  span.textContent = name;
+  const icon = document.createElement('span');
+  icon.className = 'net-icon';
+  li.appendChild(span);
+  li.appendChild(icon);
+  return li;
+}
+
 function updateUserList(users) {
   userList.innerHTML = '';
-  users.forEach((name) => {
-    const li = document.createElement('li');
-    li.textContent = name;
-    userList.appendChild(li);
-  });
+  users.forEach((name) => userList.appendChild(createUserLi(name)));
   userCount.textContent = users.length;
 }
 
 function addUser(name) {
-  const li = document.createElement('li');
-  li.textContent = name;
-  userList.appendChild(li);
+  userList.appendChild(createUserLi(name));
   userCount.textContent = userList.children.length;
 }
 
 function removeUser(name) {
   const items = userList.querySelectorAll('li');
   items.forEach((li) => {
-    if (li.textContent === name) {
-      li.remove();
-    }
+    if (li.dataset.nickname === name) li.remove();
   });
   userCount.textContent = userList.children.length;
 }

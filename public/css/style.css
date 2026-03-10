@@ -309,6 +309,14 @@ button:disabled {
   background: #252525;
   border-radius: 8px;
   font-size: 0.9rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+#user-list li .net-icon {
+  font-size: 0.75rem;
+  cursor: default;
 }
 
 

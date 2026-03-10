@@ -195,6 +195,18 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('sync-seek', { currentTime });
   });
 
+  // --- Network Status ---
+  socket.on('ping-check', (cb) => {
+    if (typeof cb === 'function') cb();
+  });
+
+  socket.on('network-status', ({ latency }) => {
+    const roomId = socket.data.roomId;
+    const nickname = socket.data.nickname;
+    if (!roomId) return;
+    socket.to(roomId).emit('user-network', { nickname, latency });
+  });
+
   // --- Request Sync (server responds directly) ---
   socket.on('request-sync', () => {
     const roomId = socket.data.roomId;
