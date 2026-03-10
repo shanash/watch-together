@@ -1,5 +1,6 @@
 const socket = io();
-const video = document.getElementById('video-player');
+const videoEl = document.getElementById('video-player');
+const ytPlayerWrap = document.getElementById('yt-player-wrap');
 const roomIdEl = document.getElementById('room-id');
 const copyCodeBtn = document.getElementById('copy-code');
 const userList = document.getElementById('user-list');
@@ -16,9 +17,123 @@ let roomId = sessionStorage.getItem('wt-roomId');
 let nickname = sessionStorage.getItem('wt-nickname');
 const action = sessionStorage.getItem('wt-action');
 
+// Player abstraction
+let player = null;
+let pendingSyncState = null;
+
 // Redirect if no session data
 if (!roomId || !nickname || !action) {
   window.location.href = '/';
+}
+
+// === YouTube URL Detection ===
+function getYouTubeVideoId(url) {
+  const match = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([^&?#\/]+)/
+  );
+  return match ? match[1] : null;
+}
+
+// === Player Abstraction ===
+function initPlayer(videoUrl, onReady) {
+  const ytId = getYouTubeVideoId(videoUrl);
+  if (ytId) {
+    initYouTubePlayer(ytId, onReady);
+  } else {
+    initHTML5Player(videoUrl);
+    onReady();
+  }
+}
+
+function initHTML5Player(url) {
+  videoEl.hidden = false;
+  ytPlayerWrap.hidden = true;
+  videoEl.src = url;
+  videoEl.controls = true;
+
+  player = {
+    play() { videoEl.play(); },
+    pause() { videoEl.pause(); },
+    get currentTime() { return videoEl.currentTime; },
+    set currentTime(t) { videoEl.currentTime = t; },
+    get paused() { return videoEl.paused; },
+    get duration() { return videoEl.duration || Infinity; },
+    onPlay(cb) { videoEl.addEventListener('play', cb); },
+    onPause(cb) { videoEl.addEventListener('pause', cb); },
+    onSeeked(cb) { videoEl.addEventListener('seeked', cb); },
+    isYouTube: false,
+  };
+}
+
+function initYouTubePlayer(videoId, onReady) {
+  videoEl.hidden = true;
+  ytPlayerWrap.hidden = false;
+
+  const callbacks = { play: [], pause: [] };
+  let ytTimeout = null;
+
+  player = {
+    _yt: null,
+    play() { if (this._yt) this._yt.playVideo(); },
+    pause() { if (this._yt) this._yt.pauseVideo(); },
+    get currentTime() { return this._yt ? this._yt.getCurrentTime() : 0; },
+    set currentTime(t) { if (this._yt) this._yt.seekTo(t, true); },
+    get paused() { return this._yt ? this._yt.getPlayerState() !== 1 : true; },
+    get duration() { return this._yt ? this._yt.getDuration() : Infinity; },
+    onPlay(cb) { callbacks.play.push(cb); },
+    onPause(cb) { callbacks.pause.push(cb); },
+    onSeeked(cb) { /* YouTube state changes cover seeking */ },
+    isYouTube: true,
+  };
+
+  // Load YT IFrame API
+  const tag = document.createElement('script');
+  tag.src = 'https://www.youtube.com/iframe_api';
+  tag.onerror = () => {
+    statusMsg.textContent = 'YouTube API를 로드할 수 없습니다.';
+  };
+  document.head.appendChild(tag);
+
+  // Timeout for API load
+  ytTimeout = setTimeout(() => {
+    if (!player._yt) {
+      statusMsg.textContent = 'YouTube 로딩 시간이 초과되었습니다.';
+    }
+  }, 10000);
+
+  window.onYouTubeIframeAPIReady = () => {
+    player._yt = new YT.Player('yt-player', {
+      videoId,
+      playerVars: { autoplay: 0, controls: 1, rel: 0 },
+      events: {
+        onReady: () => {
+          clearTimeout(ytTimeout);
+          onReady();
+          if (pendingSyncState) {
+            applySyncState(pendingSyncState);
+            pendingSyncState = null;
+          }
+        },
+        onStateChange: (e) => {
+          if (e.data === YT.PlayerState.PLAYING) {
+            callbacks.play.forEach((cb) => cb());
+          } else if (e.data === YT.PlayerState.PAUSED) {
+            callbacks.pause.forEach((cb) => cb());
+          }
+        },
+        onError: (e) => {
+          const messages = {
+            2: '잘못된 YouTube 영상 ID입니다.',
+            5: 'YouTube 플레이어 오류가 발생했습니다.',
+            100: '해당 영상을 찾을 수 없습니다.',
+            101: '이 영상은 외부 재생이 허용되지 않습니다.',
+            150: '이 영상은 외부 재생이 허용되지 않습니다.',
+          };
+          statusMsg.textContent = messages[e.data] || 'YouTube 오류가 발생했습니다.';
+        },
+      },
+    });
+  };
 }
 
 // --- Init ---
@@ -32,7 +147,7 @@ socket.on('connect', () => {
   }
 });
 
-// --- Host: Room Created ---
+// --- Room Created ---
 socket.on('room-created', ({ roomId: id }) => {
   roomId = id;
   sessionStorage.setItem('wt-roomId', roomId);
@@ -40,59 +155,69 @@ socket.on('room-created', ({ roomId: id }) => {
   roomIdEl.textContent = roomId;
   statusMsg.textContent = '방이 생성되었습니다. 영상을 재생하세요.';
 
-  // Set video source
   const videoUrl = sessionStorage.getItem('wt-videoUrl');
-  video.src = videoUrl;
-  video.controls = true;
+
+  initPlayer(videoUrl, () => {
+    bindSyncEvents();
+    bindKeyboardControls();
+  });
 
   updateUserList([nickname]);
-  bindSyncEvents();
-  bindKeyboardControls();
 
-  // Load subtitle if available
+  // Load subtitle if available (HTML5 only)
   const subUrl = sessionStorage.getItem('wt-subtitleUrl');
-  if (subUrl) loadSubtitle(subUrl);
+  if (subUrl && !getYouTubeVideoId(videoUrl)) loadSubtitle(subUrl);
 });
 
-// --- Guest: Room Joined ---
+// --- Room Joined ---
 socket.on('room-joined', ({ room, playbackState }) => {
   roomIdEl.textContent = roomId;
   statusMsg.textContent = '방에 참가했습니다.';
 
-  video.src = room.videoUrl;
-  video.controls = true;
+  const isYT = !!getYouTubeVideoId(room.videoUrl);
 
-  updateUserList(room.users);
-  bindSyncEvents();
-  bindKeyboardControls();
-
-  // Apply initial sync state
-  if (playbackState) {
-    applySyncState(playbackState);
+  // For YouTube, queue sync state since player loads async
+  if (isYT && playbackState) {
+    pendingSyncState = playbackState;
   }
 
-  // Load subtitle if available
-  if (room.subtitleUrl) loadSubtitle(room.subtitleUrl);
+  initPlayer(room.videoUrl, () => {
+    bindSyncEvents();
+    bindKeyboardControls();
+
+    // Apply initial sync state (for HTML5, or if YouTube loaded fast)
+    if (playbackState && !pendingSyncState) {
+      applySyncState(playbackState);
+    }
+  });
+
+  updateUserList(room.users);
+
+  // Load subtitle if available (HTML5 only)
+  if (room.subtitleUrl && !isYT) loadSubtitle(room.subtitleUrl);
 });
 
 // --- Sync Events from Others ---
 socket.on('sync-play', ({ currentTime }) => {
+  if (!player) return;
   startSyncCooldown();
-  video.currentTime = currentTime;
-  video.play();
+  player.currentTime = currentTime;
+  player.play();
   showSyncNotice();
 });
 
 socket.on('sync-pause', ({ currentTime }) => {
+  if (!player) return;
   startSyncCooldown();
-  video.currentTime = currentTime;
-  video.pause();
+  player.currentTime = currentTime;
+  player.pause();
   showSyncNotice();
 });
 
 socket.on('sync-seek', ({ currentTime }) => {
+  if (!player) return;
   startSyncCooldown();
-  video.currentTime = currentTime;
+  player.currentTime = currentTime;
   showSyncNotice();
 });
 
@@ -111,7 +236,6 @@ socket.on('user-left', ({ nickname: name }) => {
   removeUser(name);
   statusMsg.textContent = `${name}님이 나갔습니다.`;
 });
-
 
 // --- Error ---
 socket.on('error-msg', ({ message }) => {
@@ -166,21 +290,21 @@ function bindSyncEvents() {
   if (syncEventsBound) return;
   syncEventsBound = true;
 
-  video.addEventListener('play', () => {
+  player.onPlay(() => {
     if (!syncCooldown) {
-      socket.emit('sync-play', { currentTime: video.currentTime });
+      socket.emit('sync-play', { currentTime: player.currentTime });
     }
   });
 
-  video.addEventListener('pause', () => {
+  player.onPause(() => {
     if (!syncCooldown) {
-      socket.emit('sync-pause', { currentTime: video.currentTime });
+      socket.emit('sync-pause', { currentTime: player.currentTime });
     }
   });
 
-  video.addEventListener('seeked', () => {
+  player.onSeeked(() => {
     if (!syncCooldown) {
-      socket.emit('sync-seek', { currentTime: video.currentTime });
+      socket.emit('sync-seek', { currentTime: player.currentTime });
     }
   });
 }
@@ -192,24 +316,32 @@ function bindKeyboardControls() {
   keyboardBound = true;
 
   document.addEventListener('keydown', (e) => {
+    // Don't handle if YouTube iframe has focus
+    if (player.isYouTube && document.activeElement?.tagName === 'IFRAME') return;
+
     if (e.code === 'Space') {
       e.preventDefault();
-      if (video.paused) {
-        video.play();
+      if (player.paused) {
+        player.play();
       } else {
-        video.pause();
+        player.pause();
       }
     } else if (e.code === 'ArrowLeft') {
       e.preventDefault();
-      video.currentTime = Math.max(0, video.currentTime - 5);
+      player.currentTime = Math.max(0, player.currentTime - 5);
     } else if (e.code === 'ArrowRight') {
       e.preventDefault();
-      video.currentTime = Math.min(video.duration || Infinity, video.currentTime + 5);
+      player.currentTime = Math.min(player.duration, player.currentTime + 5);
     }
   });
 }
 
 function applySyncState(state) {
+  if (!player || (player.isYouTube && !player._yt)) {
+    pendingSyncState = state;
+    return;
+  }
+
   startSyncCooldown();
 
   // Estimate current time if playing (based on elapsed time since update)
@@ -219,12 +351,12 @@ function applySyncState(state) {
     targetTime += elapsed;
   }
 
-  video.currentTime = targetTime;
+  player.currentTime = targetTime;
 
   if (state.isPlaying) {
-    video.play();
+    player.play();
   } else {
-    video.pause();
+    player.pause();
   }
 
   showSyncNotice();
@@ -266,7 +398,7 @@ function removeUser(name) {
   userCount.textContent = userList.children.length;
 }
 
-// === Subtitle Functions ===
+// === Subtitle Functions (HTML5 only) ===
 
 function loadSubtitle(url) {
   // Proxy through our server to avoid CORS issues with R2
@@ -285,7 +417,7 @@ function loadSubtitle(url) {
 
       function addTrack() {
         // Remove existing tracks
-        const oldTracks = video.querySelectorAll('track');
+        const oldTracks = videoEl.querySelectorAll('track');
         oldTracks.forEach((t) => t.remove());
 
         const track = document.createElement('track');
@@ -294,12 +426,12 @@ function loadSubtitle(url) {
         track.srclang = 'ko';
         track.src = blobUrl;
         track.default = true;
-        video.appendChild(track);
+        videoEl.appendChild(track);
 
         // Ensure track mode is set after a brief delay for browser to register
         setTimeout(() => {
-          if (video.textTracks.length > 0) {
-            video.textTracks[0].mode = 'showing';
+          if (videoEl.textTracks.length > 0) {
+            videoEl.textTracks[0].mode = 'showing';
           }
         }, 100);
 
@@ -308,10 +440,10 @@ function loadSubtitle(url) {
       }
 
       // Add track after video has metadata, or immediately if already loaded
-      if (video.readyState >= 1) {
+      if (videoEl.readyState >= 1) {
         addTrack();
       } else {
-        video.addEventListener('loadedmetadata', addTrack, { once: true });
+        videoEl.addEventListener('loadedmetadata', addTrack, { once: true });
       }
     })
     .catch((err) => {
@@ -321,8 +453,8 @@ function loadSubtitle(url) {
 }
 
 subToggle.addEventListener('click', () => {
-  if (video.textTracks.length > 0) {
-    const track = video.textTracks[0];
+  if (videoEl.textTracks.length > 0) {
+    const track = videoEl.textTracks[0];
     if (track.mode === 'showing') {
       track.mode = 'hidden';
       subToggle.textContent = '자막 켜기';
