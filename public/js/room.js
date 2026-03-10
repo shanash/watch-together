@@ -141,8 +141,8 @@ socket.on('user-network', ({ nickname: name, latency }) => {
     icon.textContent = '\u{1F7E1}';
     icon.title = `지연: ${latency}ms`;
   } else {
-    icon.textContent = '';
-    icon.title = '';
+    icon.textContent = '\u{1F7E2}';
+    icon.title = `지연: ${latency}ms`;
   }
 });
 
