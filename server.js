@@ -110,8 +110,10 @@ io.on('connection', (socket) => {
   // --- Create Room ---
   socket.on('create-room', ({ nickname, videoUrl, subtitleUrl }) => {
     const roomId = generateRoomId();
+    const title = videoUrl.split('/').pop().split('?')[0] || 'Video';
     const room = {
-      videoUrl,
+      playlist: [{ url: videoUrl, title, addedBy: nickname }],
+      currentIndex: 0,
       subtitleUrl: subtitleUrl || null,
       users: [{ id: socket.id, nickname }],
       playbackState: {
@@ -125,7 +127,7 @@ io.on('connection', (socket) => {
     socket.data.roomId = roomId;
     socket.data.nickname = nickname;
 
-    socket.emit('room-created', { roomId });
+    socket.emit('room-created', { roomId, playlist: room.playlist, currentIndex: 0 });
     console.log(`Room ${roomId} created by ${nickname}`);
   });
 
@@ -133,7 +135,7 @@ io.on('connection', (socket) => {
   socket.on('join-room', ({ roomId, nickname }) => {
     const room = rooms.get(roomId);
     if (!room) {
-      socket.emit('error-msg', { message: '존재하지 않는 방입니다.' });
+      socket.emit('error-msg', { message: '존재하지 않는 방입니다.', fatal: true });
       return;
     }
 
@@ -144,7 +146,8 @@ io.on('connection', (socket) => {
 
     socket.emit('room-joined', {
       room: {
-        videoUrl: room.videoUrl,
+        playlist: room.playlist,
+        currentIndex: room.currentIndex,
         subtitleUrl: room.subtitleUrl,
         users: room.users.map((u) => u.nickname),
       },
@@ -193,6 +196,44 @@ io.on('connection', (socket) => {
       updatedAt: Date.now(),
     };
     socket.to(roomId).emit('sync-seek', { currentTime });
+  });
+
+  // --- Playlist Events ---
+  socket.on('playlist-add', ({ url, title }) => {
+    const roomId = socket.data.roomId;
+    const room = rooms.get(roomId);
+    if (!room) return;
+    if (room.playlist.length >= 100) {
+      socket.emit('error-msg', { message: '재생목록은 최대 100개까지 추가할 수 있습니다.' });
+      return;
+    }
+    room.playlist.push({ url, title, addedBy: socket.data.nickname });
+    io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
+  });
+
+  socket.on('playlist-play', ({ index }) => {
+    const roomId = socket.data.roomId;
+    const room = rooms.get(roomId);
+    if (!room || index < 0 || index >= room.playlist.length) return;
+    if (index === room.currentIndex) return;
+    room.currentIndex = index;
+    room.playbackState = { currentTime: 0, isPlaying: true, updatedAt: Date.now() };
+    io.in(roomId).emit('playlist-switch', { url: room.playlist[index].url, index });
+  });
+
+  socket.on('video-ended', ({ index }) => {
+    const roomId = socket.data.roomId;
+    const room = rooms.get(roomId);
+    if (!room || room.currentIndex !== index) return;
+    const nextIndex = index + 1;
+    if (nextIndex >= room.playlist.length) {
+      room.playbackState = { currentTime: 0, isPlaying: false, updatedAt: Date.now() };
+      io.in(roomId).emit('playlist-ended');
+      return;
+    }
+    room.currentIndex = nextIndex;
+    room.playbackState = { currentTime: 0, isPlaying: true, updatedAt: Date.now() };
+    io.in(roomId).emit('playlist-switch', { url: room.playlist[nextIndex].url, index: nextIndex });
   });
 
   // --- Network Status ---

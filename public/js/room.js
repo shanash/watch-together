@@ -8,8 +8,15 @@ const userCount = document.getElementById('user-count');
 const statusMsg = document.getElementById('status-msg');
 const syncNotice = document.getElementById('sync-notice');
 const subToggle = document.getElementById('sub-toggle');
+const playlistEl = document.getElementById('playlist');
+const playlistUrlInput = document.getElementById('playlist-url');
+const playlistAddUrlBtn = document.getElementById('playlist-add-url');
+const playlistFileInput = document.getElementById('playlist-file');
+const plUploadProgress = document.getElementById('playlist-upload-progress');
+const plProgressBar = document.getElementById('playlist-progress-bar');
+const plProgressText = document.getElementById('playlist-progress-text');
 
-let syncCooldown = false; // timer-based flag to prevent sync event loops
+let syncCooldown = false;
 let syncCooldownTimer = null;
 let syncEventsBound = false;
 const SYNC_COOLDOWN_MS = 300;
@@ -20,6 +27,11 @@ const action = sessionStorage.getItem('wt-action');
 // Player abstraction
 let player = null;
 let pendingSyncState = null;
+let ytApiLoaded = false;
+
+// Playlist state
+let playlist = [];
+let currentIndex = 0;
 
 // Redirect if no session data
 if (!roomId || !nickname || !action) {
@@ -61,6 +73,7 @@ function initHTML5Player(url) {
     onPlay(cb) { videoEl.addEventListener('play', cb); },
     onPause(cb) { videoEl.addEventListener('pause', cb); },
     onSeeked(cb) { videoEl.addEventListener('seeked', cb); },
+    onEnded(cb) { videoEl.addEventListener('ended', cb); },
     isYouTube: false,
   };
 }
@@ -69,7 +82,7 @@ function initYouTubePlayer(videoId, onReady) {
   videoEl.hidden = true;
   ytPlayerWrap.hidden = false;
 
-  const callbacks = { play: [], pause: [] };
+  const callbacks = { play: [], pause: [], ended: [] };
   let ytTimeout = null;
 
   player = {
@@ -83,25 +96,11 @@ function initYouTubePlayer(videoId, onReady) {
     onPlay(cb) { callbacks.play.push(cb); },
     onPause(cb) { callbacks.pause.push(cb); },
     onSeeked(cb) { /* YouTube state changes cover seeking */ },
+    onEnded(cb) { callbacks.ended.push(cb); },
     isYouTube: true,
   };
 
-  // Load YT IFrame API
-  const tag = document.createElement('script');
-  tag.src = 'https://www.youtube.com/iframe_api';
-  tag.onerror = () => {
-    statusMsg.textContent = 'YouTube API를 로드할 수 없습니다.';
-  };
-  document.head.appendChild(tag);
-
-  // Timeout for API load
-  ytTimeout = setTimeout(() => {
-    if (!player._yt) {
-      statusMsg.textContent = 'YouTube 로딩 시간이 초과되었습니다.';
-    }
-  }, 10000);
-
-  window.onYouTubeIframeAPIReady = () => {
+  function createYTPlayer() {
     player._yt = new YT.Player('yt-player', {
       videoId,
       playerVars: { autoplay: 0, controls: 1, rel: 0 },
@@ -119,6 +118,8 @@ function initYouTubePlayer(videoId, onReady) {
             callbacks.play.forEach((cb) => cb());
           } else if (e.data === YT.PlayerState.PAUSED) {
             callbacks.pause.forEach((cb) => cb());
+          } else if (e.data === YT.PlayerState.ENDED) {
+            callbacks.ended.forEach((cb) => cb());
           }
         },
         onError: (e) => {
@@ -133,7 +134,67 @@ function initYouTubePlayer(videoId, onReady) {
         },
       },
     });
-  };
+  }
+
+  if (ytApiLoaded) {
+    createYTPlayer();
+  } else {
+    const tag = document.createElement('script');
+    tag.src = 'https://www.youtube.com/iframe_api';
+    tag.onerror = () => {
+      statusMsg.textContent = 'YouTube API를 로드할 수 없습니다.';
+    };
+    document.head.appendChild(tag);
+
+    ytTimeout = setTimeout(() => {
+      if (!player._yt) {
+        statusMsg.textContent = 'YouTube 로딩 시간이 초과되었습니다.';
+      }
+    }, 10000);
+
+    window.onYouTubeIframeAPIReady = () => {
+      ytApiLoaded = true;
+      createYTPlayer();
+    };
+  }
+}
+
+// Named handlers for cleanup
+function syncPlayHandler() {
+  if (!syncCooldown) socket.emit('sync-play', { currentTime: player.currentTime });
+}
+function syncPauseHandler() {
+  if (!syncCooldown) socket.emit('sync-pause', { currentTime: player.currentTime });
+}
+function syncSeekHandler() {
+  if (!syncCooldown) socket.emit('sync-seek', { currentTime: player.currentTime });
+}
+function endedHandler() {
+  socket.emit('video-ended', { index: currentIndex });
+}
+
+function switchVideo(url, onReady) {
+  // Clean up old HTML5 listeners
+  videoEl.removeEventListener('play', syncPlayHandler);
+  videoEl.removeEventListener('pause', syncPauseHandler);
+  videoEl.removeEventListener('seeked', syncSeekHandler);
+  videoEl.removeEventListener('ended', endedHandler);
+
+  // Clean up old YouTube player
+  if (player && player.isYouTube && player._yt) {
+    player._yt.destroy();
+    ytPlayerWrap.innerHTML = '<div id="yt-player"></div>';
+  }
+
+  syncEventsBound = false;
+  player = null;
+  pendingSyncState = null;
+
+  initPlayer(url, () => {
+    bindSyncEvents();
+    bindEndedEvent();
+    onReady();
+  });
 }
 
 // --- Init ---
@@ -148,17 +209,22 @@ socket.on('connect', () => {
 });
 
 // --- Room Created ---
-socket.on('room-created', ({ roomId: id }) => {
+socket.on('room-created', ({ roomId: id, playlist: pl, currentIndex: idx }) => {
   roomId = id;
   sessionStorage.setItem('wt-roomId', roomId);
 
   roomIdEl.textContent = roomId;
   statusMsg.textContent = '방이 생성되었습니다. 영상을 재생하세요.';
 
-  const videoUrl = sessionStorage.getItem('wt-videoUrl');
+  playlist = pl;
+  currentIndex = idx;
+  renderPlaylist();
+
+  const videoUrl = playlist[currentIndex].url;
 
   initPlayer(videoUrl, () => {
     bindSyncEvents();
+    bindEndedEvent();
     bindKeyboardControls();
   });
 
@@ -174,15 +240,21 @@ socket.on('room-joined', ({ room, playbackState }) => {
   roomIdEl.textContent = roomId;
   statusMsg.textContent = '방에 참가했습니다.';
 
-  const isYT = !!getYouTubeVideoId(room.videoUrl);
+  playlist = room.playlist;
+  currentIndex = room.currentIndex;
+  renderPlaylist();
+
+  const videoUrl = playlist[currentIndex].url;
+  const isYT = !!getYouTubeVideoId(videoUrl);
 
   // For YouTube, queue sync state since player loads async
   if (isYT && playbackState) {
     pendingSyncState = playbackState;
   }
 
-  initPlayer(room.videoUrl, () => {
+  initPlayer(videoUrl, () => {
     bindSyncEvents();
+    bindEndedEvent();
     bindKeyboardControls();
 
     // Apply initial sync state (for HTML5, or if YouTube loaded fast)
@@ -226,6 +298,25 @@ socket.on('sync-state', (state) => {
   applySyncState(state);
 });
 
+// --- Playlist Events ---
+socket.on('playlist-updated', ({ playlist: pl, currentIndex: idx }) => {
+  playlist = pl;
+  currentIndex = idx;
+  renderPlaylist();
+});
+
+socket.on('playlist-switch', ({ url, index }) => {
+  currentIndex = index;
+  renderPlaylist();
+  switchVideo(url, () => {
+    player.play();
+  });
+});
+
+socket.on('playlist-ended', () => {
+  statusMsg.textContent = '재생목록이 끝났습니다.';
+});
+
 // --- User Events ---
 socket.on('user-joined', ({ nickname: name }) => {
   addUser(name);
@@ -238,14 +329,16 @@ socket.on('user-left', ({ nickname: name }) => {
 });
 
 // --- Error ---
-socket.on('error-msg', ({ message }) => {
+socket.on('error-msg', ({ message, fatal }) => {
   statusMsg.textContent = message;
-  setTimeout(() => { window.location.href = '/'; }, 2000);
+  if (fatal) {
+    setTimeout(() => { window.location.href = '/'; }, 2000);
+  }
 });
 
 // --- Network Status ---
 const PING_INTERVAL = 5000;
-const SLOW_THRESHOLD = 300; // ms
+const SLOW_THRESHOLD = 300;
 
 setInterval(() => {
   const start = Date.now();
@@ -278,6 +371,81 @@ copyCodeBtn.addEventListener('click', () => {
   });
 });
 
+// --- Playlist Add (URL) ---
+playlistAddUrlBtn.addEventListener('click', () => {
+  const url = playlistUrlInput.value.trim();
+  if (!url) return;
+  const ytId = getYouTubeVideoId(url);
+  const title = ytId ? 'YouTube 영상' : (url.split('/').pop().split('?')[0] || 'Video');
+  socket.emit('playlist-add', { url, title });
+  playlistUrlInput.value = '';
+});
+
+playlistUrlInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') playlistAddUrlBtn.click();
+});
+
+// --- Playlist Add (File Upload) ---
+playlistFileInput.addEventListener('change', async () => {
+  const file = playlistFileInput.files[0];
+  if (!file) return;
+
+  const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
+  if (file.size > MAX_FILE_SIZE) {
+    statusMsg.textContent = '파일 크기는 2GB 이하여야 합니다.';
+    playlistFileInput.value = '';
+    return;
+  }
+
+  plUploadProgress.hidden = false;
+  plProgressBar.style.width = '0%';
+  plProgressText.textContent = '0%';
+
+  try {
+    const res = await fetch('/api/presign', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name, contentType: file.type || 'video/mp4' }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || '업로드 URL 생성 실패');
+    }
+
+    const { presignedUrl, publicUrl } = await res.json();
+
+    await new Promise((resolve, reject) => {
+      const xhr = new XMLHttpRequest();
+      xhr.open('PUT', presignedUrl);
+      xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) {
+          const pct = Math.round((e.loaded / e.total) * 100);
+          plProgressBar.style.width = `${pct}%`;
+          plProgressText.textContent = `${pct}%`;
+        }
+      };
+
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) resolve();
+        else reject(new Error(`업로드 실패 (HTTP ${xhr.status})`));
+      };
+
+      xhr.onerror = () => reject(new Error('네트워크 오류'));
+      xhr.send(file);
+    });
+
+    socket.emit('playlist-add', { url: publicUrl, title: file.name });
+  } catch (err) {
+    statusMsg.textContent = err.message;
+  } finally {
+    plUploadProgress.hidden = true;
+    playlistFileInput.value = '';
+  }
+});
+
 // === Helper Functions ===
 
 function startSyncCooldown() {
@@ -290,23 +458,13 @@ function bindSyncEvents() {
   if (syncEventsBound) return;
   syncEventsBound = true;
 
-  player.onPlay(() => {
-    if (!syncCooldown) {
-      socket.emit('sync-play', { currentTime: player.currentTime });
-    }
-  });
+  player.onPlay(syncPlayHandler);
+  player.onPause(syncPauseHandler);
+  player.onSeeked(syncSeekHandler);
+}
 
-  player.onPause(() => {
-    if (!syncCooldown) {
-      socket.emit('sync-pause', { currentTime: player.currentTime });
-    }
-  });
-
-  player.onSeeked(() => {
-    if (!syncCooldown) {
-      socket.emit('sync-seek', { currentTime: player.currentTime });
-    }
-  });
+function bindEndedEvent() {
+  player.onEnded(endedHandler);
 }
 
 // --- Keyboard Controls ---
@@ -316,6 +474,9 @@ function bindKeyboardControls() {
   keyboardBound = true;
 
   document.addEventListener('keydown', (e) => {
+    if (!player) return;
+    // Don't handle if typing in input
+    if (e.target.tagName === 'INPUT') return;
     // Don't handle if YouTube iframe has focus
     if (player.isYouTube && document.activeElement?.tagName === 'IFRAME') return;
 
@@ -344,7 +505,6 @@ function applySyncState(state) {
 
   startSyncCooldown();
 
-  // Estimate current time if playing (based on elapsed time since update)
   let targetTime = state.currentTime;
   if (state.isPlaying && state.updatedAt) {
     const elapsed = (Date.now() - state.updatedAt) / 1000;
@@ -366,6 +526,29 @@ function showSyncNotice() {
   syncNotice.hidden = false;
   setTimeout(() => { syncNotice.hidden = true; }, 1200);
 }
+
+// === Playlist UI ===
+
+function renderPlaylist() {
+  playlistEl.innerHTML = '';
+  playlist.forEach((item, i) => {
+    const li = document.createElement('li');
+    li.textContent = item.title;
+    li.title = `${item.title} (${item.addedBy})`;
+    if (i === currentIndex) li.classList.add('active');
+    li.addEventListener('click', () => {
+      if (i !== currentIndex) {
+        socket.emit('playlist-play', { index: i });
+      }
+    });
+    playlistEl.appendChild(li);
+  });
+  // Scroll active into view
+  const activeLi = playlistEl.querySelector('.active');
+  if (activeLi) activeLi.scrollIntoView({ block: 'nearest' });
+}
+
+// === User List ===
 
 function createUserLi(name) {
   const li = document.createElement('li');
@@ -401,7 +584,6 @@ function removeUser(name) {
 // === Subtitle Functions (HTML5 only) ===
 
 function loadSubtitle(url) {
-  // Proxy through our server to avoid CORS issues with R2
   const proxyUrl = `/api/subtitle-proxy?url=${encodeURIComponent(url)}`;
 
   fetch(proxyUrl)
@@ -416,7 +598,6 @@ function loadSubtitle(url) {
       const blobUrl = URL.createObjectURL(blob);
 
       function addTrack() {
-        // Remove existing tracks
         const oldTracks = videoEl.querySelectorAll('track');
         oldTracks.forEach((t) => t.remove());
 
@@ -428,7 +609,6 @@ function loadSubtitle(url) {
         track.default = true;
         videoEl.appendChild(track);
 
-        // Ensure track mode is set after a brief delay for browser to register
         setTimeout(() => {
           if (videoEl.textTracks.length > 0) {
             videoEl.textTracks[0].mode = 'showing';
@@ -439,7 +619,6 @@ function loadSubtitle(url) {
         subToggle.textContent = '자막 끄기';
       }
 
-      // Add track after video has metadata, or immediately if already loaded
       if (videoEl.readyState >= 1) {
         addTrack();
       } else {

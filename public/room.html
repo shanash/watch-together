@@ -32,8 +32,29 @@
 
       <!-- Sidebar -->
       <div class="sidebar">
-        <h3>참가자 <span id="user-count">0</span>명</h3>
-        <ul id="user-list"></ul>
+        <div class="sidebar-section">
+          <h3>참가자 <span id="user-count">0</span>명</h3>
+          <ul id="user-list"></ul>
+        </div>
+
+        <div class="sidebar-section playlist-section">
+          <h3>재생목록</h3>
+          <ul id="playlist"></ul>
+          <div class="playlist-add">
+            <input type="text" id="playlist-url" placeholder="URL 입력">
+            <div class="playlist-add-btns">
+              <button id="playlist-add-url">추가</button>
+              <label class="playlist-file-label">
+                <input type="file" id="playlist-file" accept=".mp4,.webm" hidden>
+                파일
+              </label>
+            </div>
+            <div id="playlist-upload-progress" class="progress-wrap" hidden>
+              <div id="playlist-progress-bar" class="progress-bar"></div>
+              <span id="playlist-progress-text" class="progress-text">0%</span>
+            </div>
+          </div>
+        </div>
 
         <button id="sub-toggle" class="sub-toggle" hidden>자막 끄기</button>
 

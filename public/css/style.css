@@ -336,6 +336,87 @@ button:disabled {
 }
 
 
+/* === Playlist === */
+.sidebar-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.playlist-section {
+  border-top: 1px solid #333;
+  padding-top: 16px;
+}
+
+#playlist {
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+#playlist li {
+  padding: 6px 10px;
+  background: #252525;
+  border-radius: 6px;
+  font-size: 0.8rem;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  transition: background 0.2s;
+}
+
+#playlist li:hover {
+  background: #333;
+}
+
+#playlist li.active {
+  background: #646cff33;
+  border-left: 3px solid #646cff;
+}
+
+.playlist-add {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.playlist-add input[type="text"] {
+  padding: 8px 10px;
+  font-size: 0.8rem;
+}
+
+.playlist-add-btns {
+  display: flex;
+  gap: 6px;
+}
+
+.playlist-add-btns button,
+.playlist-file-label {
+  flex: 1;
+  padding: 6px;
+  font-size: 0.8rem;
+  background: #333;
+  border-radius: 6px;
+  text-align: center;
+  cursor: pointer;
+  color: #e0e0e0;
+  border: none;
+  transition: background 0.2s;
+}
+
+.playlist-add-btns button:hover,
+.playlist-file-label:hover {
+  background: #444;
+}
+
+.playlist-section .progress-wrap {
+  height: 20px;
+}
+
 .sub-toggle {
   padding: 8px;
   font-size: 0.85rem;
