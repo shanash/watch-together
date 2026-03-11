@@ -1,4 +1,40 @@
 const socket = io();
+
+// --- Client Error Reporting ---
+window.addEventListener('error', (e) => {
+  socket.emit('client-error', {
+    message: e.message,
+    stack: e.error?.stack,
+    context: 'window.onerror',
+  });
+});
+
+window.addEventListener('unhandledrejection', (e) => {
+  socket.emit('client-error', {
+    message: e.reason?.message || String(e.reason),
+    stack: e.reason?.stack,
+    context: 'unhandledrejection',
+  });
+});
+
+socket.on('connect_error', (err) => {
+  console.error('Socket connect error:', err.message);
+});
+
+socket.on('disconnect', (reason) => {
+  console.warn('Socket disconnected:', reason);
+  if (reason === 'io server disconnect') {
+    statusMsg.textContent = '서버에 의해 연결이 끊겼습니다.';
+  } else if (reason === 'transport close' || reason === 'transport error') {
+    statusMsg.textContent = '네트워크 연결이 끊겼습니다. 재연결 시도 중...';
+  }
+});
+
+socket.on('reconnect', () => {
+  statusMsg.textContent = '재연결되었습니다.';
+  socket.emit('request-sync');
+});
+
 const videoEl = document.getElementById('video-player');
 const ytPlayerWrap = document.getElementById('yt-player-wrap');
 const roomIdEl = document.getElementById('room-id');

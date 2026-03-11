@@ -8,6 +8,7 @@ import { nanoid } from 'nanoid';
 import { fileURLToPath } from 'url';
 import { dirname, join, extname } from 'path';
 import { generatePresignedUrl } from './r2.js';
+import log from './logger.js';
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -44,7 +45,7 @@ app.post('/api/presign', async (req, res) => {
     const result = await generatePresignedUrl(key, contentType);
     res.json(result);
   } catch (err) {
-    console.error('Presign error:', err);
+    log.error('upload', 'Presign failed', { error: err.message });
     res.status(500).json({ error: '업로드 URL 생성에 실패했습니다.' });
   }
 });
@@ -66,7 +67,7 @@ app.post('/api/presign-subtitle', async (req, res) => {
     const result = await generatePresignedUrl(key, 'text/plain');
     res.json(result);
   } catch (err) {
-    console.error('Subtitle presign error:', err);
+    log.error('upload', 'Subtitle presign failed', { error: err.message });
     res.status(500).json({ error: '자막 업로드 URL 생성에 실패했습니다.' });
   }
 });
@@ -92,8 +93,29 @@ app.get('/api/subtitle-proxy', async (req, res) => {
     const text = await response.text();
     res.type('text/plain; charset=utf-8').send(text);
   } catch (err) {
-    console.error('Subtitle proxy error:', err);
+    log.error('subtitle', 'Proxy fetch failed', { error: err.message });
     res.status(500).json({ error: '자막 프록시 오류' });
+  }
+});
+
+// --- Log Viewer API ---
+import { readFile } from 'fs/promises';
+
+app.get('/api/logs', async (req, res) => {
+  try {
+    const date = req.query.date || new Date().toISOString().slice(0, 10);
+    const logPath = join(__dirname, 'logs', `${date}.log`);
+    const content = await readFile(logPath, 'utf-8');
+    const level = req.query.level;
+    let lines = content.split('\n').filter(Boolean);
+    if (level) {
+      lines = lines.filter((l) => l.includes(`[${level.toUpperCase()}]`));
+    }
+    const last = parseInt(req.query.last) || 200;
+    lines = lines.slice(-last);
+    res.type('text/plain; charset=utf-8').send(lines.join('\n'));
+  } catch {
+    res.status(404).send('로그 파일이 없습니다.');
   }
 });
 
@@ -105,7 +127,7 @@ function generateRoomId() {
 }
 
 io.on('connection', (socket) => {
-  console.log(`Connected: ${socket.id}`);
+  log.info('socket', 'Client connected', { socketId: socket.id });
 
   // --- Create Room ---
   socket.on('create-room', ({ nickname, videoUrl, subtitleUrl }) => {
@@ -128,7 +150,7 @@ io.on('connection', (socket) => {
     socket.data.nickname = nickname;
 
     socket.emit('room-created', { roomId, playlist: room.playlist, currentIndex: 0 });
-    console.log(`Room ${roomId} created by ${nickname}`);
+    log.info('room', 'Room created', { roomId, nickname, videoUrl });
   });
 
   // --- Join Room ---
@@ -155,7 +177,7 @@ io.on('connection', (socket) => {
     });
 
     socket.to(roomId).emit('user-joined', { nickname });
-    console.log(`${nickname} joined room ${roomId}`);
+    log.info('room', 'User joined', { roomId, nickname, userCount: room.users.length });
   });
 
   // --- Sync Events (All participants) ---
@@ -257,8 +279,36 @@ io.on('connection', (socket) => {
     socket.emit('sync-state', room.playbackState);
   });
 
+  // --- Client Error Reporting ---
+  socket.on('client-error', ({ message, stack, context }) => {
+    log.error('client', message, {
+      socketId: socket.id,
+      nickname: socket.data.nickname,
+      roomId: socket.data.roomId,
+      context,
+      stack,
+    });
+  });
+
+  // --- Socket Error ---
+  socket.on('error', (err) => {
+    log.error('socket', 'Socket error', {
+      socketId: socket.id,
+      nickname: socket.data.nickname,
+      roomId: socket.data.roomId,
+      error: err.message,
+    });
+  });
+
   // --- Disconnect ---
-  socket.on('disconnect', () => {
+  socket.on('disconnect', (reason) => {
+    log.warn('socket', 'Client disconnected', {
+      socketId: socket.id,
+      nickname: socket.data.nickname,
+      roomId: socket.data.roomId,
+      reason,
+    });
+
     const roomId = socket.data.roomId;
     const nickname = socket.data.nickname;
     if (!roomId) return;
@@ -272,16 +322,16 @@ io.on('connection', (socket) => {
     // If no users left, delete room
     if (room.users.length === 0) {
       rooms.delete(roomId);
-      console.log(`Room ${roomId} deleted (empty)`);
+      log.info('room', 'Room deleted (empty)', { roomId });
       return;
     }
 
     socket.to(roomId).emit('user-left', { nickname });
-    console.log(`${nickname} left room ${roomId}`);
+    log.info('room', 'User left', { roomId, nickname, remainingUsers: room.users.length });
   });
 });
 
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  console.log(`Server running at http://localhost:${PORT}`);
+  log.info('server', `Server started on port ${PORT}`);
 });
