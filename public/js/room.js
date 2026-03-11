@@ -30,11 +30,6 @@ socket.on('disconnect', (reason) => {
   }
 });
 
-socket.on('reconnect', () => {
-  statusMsg.textContent = '재연결되었습니다.';
-  socket.emit('request-sync');
-});
-
 const videoEl = document.getElementById('video-player');
 const ytPlayerWrap = document.getElementById('yt-player-wrap');
 const roomIdEl = document.getElementById('room-id');
@@ -59,6 +54,7 @@ const SYNC_COOLDOWN_MS = 300;
 let roomId = sessionStorage.getItem('wt-roomId');
 let nickname = sessionStorage.getItem('wt-nickname');
 const action = sessionStorage.getItem('wt-action');
+let isFirstConnect = true;
 
 // Player abstraction
 let player = null;
@@ -70,7 +66,10 @@ let playlist = [];
 let currentIndex = 0;
 
 // Redirect if no session data
-if (!roomId || !nickname || !action) {
+if (!nickname || !action) {
+  window.location.href = '/';
+}
+if (action === 'join' && !roomId) {
   window.location.href = '/';
 }
 
@@ -235,12 +234,20 @@ function switchVideo(url, onReady) {
 
 // --- Init ---
 socket.on('connect', () => {
-  if (action === 'host') {
-    const videoUrl = sessionStorage.getItem('wt-videoUrl');
-    const subtitleUrl = sessionStorage.getItem('wt-subtitleUrl') || null;
-    socket.emit('create-room', { nickname, videoUrl, subtitleUrl });
+  if (isFirstConnect) {
+    isFirstConnect = false;
+    if (action === 'host') {
+      const videoUrl = sessionStorage.getItem('wt-videoUrl');
+      const subtitleUrl = sessionStorage.getItem('wt-subtitleUrl') || null;
+      socket.emit('create-room', { nickname, videoUrl, subtitleUrl });
+    } else {
+      socket.emit('join-room', { roomId, nickname });
+    }
   } else {
-    socket.emit('join-room', { roomId, nickname });
+    // Reconnection: always rejoin existing room
+    if (roomId) {
+      socket.emit('join-room', { roomId, nickname });
+    }
   }
 });
 
@@ -250,11 +257,18 @@ socket.on('room-created', ({ roomId: id, playlist: pl, currentIndex: idx }) => {
   sessionStorage.setItem('wt-roomId', roomId);
 
   roomIdEl.textContent = roomId;
-  statusMsg.textContent = '방이 생성되었습니다. 영상을 재생하세요.';
-
   playlist = pl;
   currentIndex = idx;
   renderPlaylist();
+
+  if (player) {
+    // Room recreated after server restart - player already exists
+    statusMsg.textContent = '방이 재생성되었습니다. 새 코드: ' + roomId;
+    updateUserList([nickname]);
+    return;
+  }
+
+  statusMsg.textContent = '방이 생성되었습니다. 영상을 재생하세요.';
 
   const videoUrl = playlist[currentIndex].url;
 
@@ -273,12 +287,32 @@ socket.on('room-created', ({ roomId: id, playlist: pl, currentIndex: idx }) => {
 
 // --- Room Joined ---
 socket.on('room-joined', ({ room, playbackState }) => {
-  roomIdEl.textContent = roomId;
-  statusMsg.textContent = '방에 참가했습니다.';
+  const prevIndex = currentIndex;
 
+  roomIdEl.textContent = roomId;
   playlist = room.playlist;
   currentIndex = room.currentIndex;
   renderPlaylist();
+  updateUserList(room.users);
+
+  // Reconnection: player already initialized
+  if (player) {
+    if (prevIndex !== currentIndex) {
+      // Video changed while disconnected
+      statusMsg.textContent = '재연결되었습니다. 영상을 전환합니다.';
+      const videoUrl = playlist[currentIndex].url;
+      switchVideo(videoUrl, () => {
+        if (playbackState) applySyncState(playbackState);
+      });
+    } else {
+      statusMsg.textContent = '재연결되었습니다.';
+      if (playbackState) applySyncState(playbackState);
+    }
+    return;
+  }
+
+  // First join: initialize player
+  statusMsg.textContent = '방에 참가했습니다.';
 
   const videoUrl = playlist[currentIndex].url;
   const isYT = !!getYouTubeVideoId(videoUrl);
@@ -298,8 +332,6 @@ socket.on('room-joined', ({ room, playbackState }) => {
       applySyncState(playbackState);
     }
   });
-
-  updateUserList(room.users);
 
   // Load subtitle if available (HTML5 only)
   if (room.subtitleUrl && !isYT) loadSubtitle(room.subtitleUrl);
@@ -368,6 +400,13 @@ socket.on('user-left', ({ nickname: name }) => {
 socket.on('error-msg', ({ message, fatal }) => {
   statusMsg.textContent = message;
   if (fatal) {
+    // If host reconnects but room was deleted, recreate it
+    if (action === 'host' && !isFirstConnect) {
+      const videoUrl = sessionStorage.getItem('wt-videoUrl');
+      const subtitleUrl = sessionStorage.getItem('wt-subtitleUrl') || null;
+      socket.emit('create-room', { nickname, videoUrl, subtitleUrl });
+      return;
+    }
     setTimeout(() => { window.location.href = '/'; }, 2000);
   }
 });

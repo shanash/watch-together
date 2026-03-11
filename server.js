@@ -161,7 +161,21 @@ io.on('connection', (socket) => {
       return;
     }
 
-    room.users.push({ id: socket.id, nickname });
+    // Clear deletion grace period if room was scheduled for cleanup
+    if (room.deleteTimeout) {
+      clearTimeout(room.deleteTimeout);
+      room.deleteTimeout = null;
+      log.info('room', 'Room deletion cancelled (user rejoined)', { roomId, nickname });
+    }
+
+    // Handle reconnection: update socket id if same nickname already exists
+    const existing = room.users.find((u) => u.nickname === nickname);
+    if (existing) {
+      existing.id = socket.id;
+    } else {
+      room.users.push({ id: socket.id, nickname });
+    }
+
     socket.join(roomId);
     socket.data.roomId = roomId;
     socket.data.nickname = nickname;
@@ -176,8 +190,10 @@ io.on('connection', (socket) => {
       playbackState: room.playbackState,
     });
 
-    socket.to(roomId).emit('user-joined', { nickname });
-    log.info('room', 'User joined', { roomId, nickname, userCount: room.users.length });
+    if (!existing) {
+      socket.to(roomId).emit('user-joined', { nickname });
+    }
+    log.info('room', 'User joined', { roomId, nickname, userCount: room.users.length, reconnect: !!existing });
   });
 
   // --- Sync Events (All participants) ---
@@ -319,10 +335,16 @@ io.on('connection', (socket) => {
     // Remove user
     room.users = room.users.filter((u) => u.id !== socket.id);
 
-    // If no users left, delete room
+    // If no users left, schedule room deletion with grace period
     if (room.users.length === 0) {
-      rooms.delete(roomId);
-      log.info('room', 'Room deleted (empty)', { roomId });
+      const GRACE_PERIOD = 60000; // 60 seconds
+      log.info('room', 'Room empty, scheduled for deletion', { roomId, graceMs: GRACE_PERIOD });
+      room.deleteTimeout = setTimeout(() => {
+        if (room.users.length === 0) {
+          rooms.delete(roomId);
+          log.info('room', 'Room deleted (grace period expired)', { roomId });
+        }
+      }, GRACE_PERIOD);
       return;
     }
 

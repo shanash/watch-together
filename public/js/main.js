@@ -1,5 +1,3 @@
-const socket = io();
-
 const createForm = document.getElementById('create-form');
 const joinForm = document.getElementById('join-form');
 const errorMsg = document.getElementById('error-msg');
@@ -286,7 +284,12 @@ createForm.addEventListener('submit', (e) => {
     videoUrl = uploadedUrl;
   }
 
-  socket.emit('create-room', { nickname, videoUrl, subtitleUrl: subtitleUploadedUrl });
+  // Store data and navigate directly (room creation happens in room.js)
+  sessionStorage.setItem('wt-action', 'host');
+  sessionStorage.setItem('wt-nickname', nickname);
+  sessionStorage.setItem('wt-videoUrl', videoUrl);
+  sessionStorage.setItem('wt-subtitleUrl', subtitleUploadedUrl || '');
+  window.location.href = '/room.html';
 });
 
 // --- Join Room ---
@@ -301,26 +304,4 @@ joinForm.addEventListener('submit', (e) => {
   sessionStorage.setItem('wt-nickname', nickname);
   sessionStorage.setItem('wt-roomId', roomId);
   window.location.href = '/room.html';
-});
-
-// --- Room created -> navigate ---
-socket.on('room-created', ({ roomId }) => {
-  const nickname = document.getElementById('create-nickname').value.trim();
-  let videoUrl;
-  if (activeTab === 'url') {
-    videoUrl = videoUrlInput.value.trim();
-  } else {
-    videoUrl = uploadedUrl;
-  }
-
-  sessionStorage.setItem('wt-action', 'host');
-  sessionStorage.setItem('wt-roomId', roomId);
-  sessionStorage.setItem('wt-nickname', nickname);
-  sessionStorage.setItem('wt-videoUrl', videoUrl);
-  sessionStorage.setItem('wt-subtitleUrl', subtitleUploadedUrl || '');
-  window.location.href = '/room.html';
-});
-
-socket.on('error-msg', ({ message }) => {
-  showError(message);
 });
