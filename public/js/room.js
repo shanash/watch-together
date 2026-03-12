@@ -1,5 +1,6 @@
 const socket = io({
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
+  upgrade: true,
   reconnection: true,
   reconnectionAttempts: Infinity,
   reconnectionDelay: 1000,
@@ -195,12 +196,13 @@ function initYouTubePlayer(videoId, onReady) {
 
   player = {
     _yt: null,
-    play() { if (this._yt) this._yt.playVideo(); },
-    pause() { if (this._yt) this._yt.pauseVideo(); },
-    get currentTime() { return this._yt ? this._yt.getCurrentTime() : 0; },
-    set currentTime(t) { if (this._yt) this._yt.seekTo(t, true); },
-    get paused() { return this._yt ? this._yt.getPlayerState() !== 1 : true; },
-    get duration() { return this._yt ? this._yt.getDuration() : Infinity; },
+    _ready: false,
+    play() { if (this._ready) this._yt.playVideo(); },
+    pause() { if (this._ready) this._yt.pauseVideo(); },
+    get currentTime() { return this._ready ? this._yt.getCurrentTime() : 0; },
+    set currentTime(t) { if (this._ready) this._yt.seekTo(t, true); },
+    get paused() { return this._ready ? this._yt.getPlayerState() !== 1 : true; },
+    get duration() { return this._ready ? this._yt.getDuration() : Infinity; },
     onPlay(cb) { callbacks.play.push(cb); },
     onPause(cb) { callbacks.pause.push(cb); },
     onSeeked(cb) { /* YouTube state changes cover seeking */ },
@@ -215,6 +217,7 @@ function initYouTubePlayer(videoId, onReady) {
       events: {
         onReady: () => {
           clearTimeout(ytTimeout);
+          player._ready = true;
           onReady();
           if (pendingSyncState) {
             applySyncState(pendingSyncState);

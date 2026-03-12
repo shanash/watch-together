@@ -26,8 +26,9 @@ const server = createServer(app);
 const io = new Server(server, {
   pingInterval: 25000,
   pingTimeout: 60000,
-  transports: ['websocket', 'polling'],
+  transports: ['polling', 'websocket'],
   allowUpgrades: true,
+  httpCompression: false,
 });
 
 // Middleware
