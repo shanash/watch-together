@@ -7,8 +7,16 @@ import { Server } from 'socket.io';
 import { nanoid } from 'nanoid';
 import { fileURLToPath } from 'url';
 import { dirname, join, extname } from 'path';
+import { execSync } from 'child_process';
 import { generatePresignedUrl } from './r2.js';
 import log from './logger.js';
+
+// Build version from git
+let BUILD_VERSION = 'unknown';
+try {
+  BUILD_VERSION = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+} catch {}
+const BUILD_TIME = new Date().toISOString();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -24,6 +32,11 @@ app.use(express.static(join(__dirname, 'public')));
 // Serve ffmpeg.wasm UMD files from node_modules (same-origin for Worker)
 app.use('/ffmpeg', express.static(join(__dirname, 'node_modules/@ffmpeg/ffmpeg/dist/umd')));
 app.use('/ffmpeg-util', express.static(join(__dirname, 'node_modules/@ffmpeg/util/dist/umd')));
+
+// --- Version API ---
+app.get('/api/version', (req, res) => {
+  res.json({ version: BUILD_VERSION, buildTime: BUILD_TIME });
+});
 
 // --- Upload: Presigned URL ---
 const ALLOWED_EXTS = new Set(['.mp4', '.webm', '.mkv']);

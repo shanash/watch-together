@@ -452,3 +452,10 @@ button:disabled {
     max-height: 200px;
   }
 }
+
+.build-info {
+  text-align: center;
+  margin-top: 24px;
+  font-size: 11px;
+  color: #555;
+}

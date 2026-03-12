@@ -297,3 +297,12 @@ joinForm.addEventListener('submit', (e) => {
   sessionStorage.setItem('wt-roomId', roomId);
   window.location.href = '/room.html';
 });
+
+// --- Build Info ---
+fetch('/api/version')
+  .then((r) => r.json())
+  .then(({ version, buildTime }) => {
+    const t = new Date(buildTime).toLocaleString('ko-KR', { timeZone: 'Asia/Seoul' });
+    document.getElementById('build-info').textContent = `v${version} (${t})`;
+  })
+  .catch(() => {});
