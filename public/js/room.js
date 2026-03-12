@@ -92,7 +92,29 @@ function initPlayer(videoUrl, onReady) {
   }
 }
 
+function destroyCurrentPlayer() {
+  // Clean up HTML5 player
+  videoEl.removeEventListener('play', syncPlayHandler);
+  videoEl.removeEventListener('pause', syncPauseHandler);
+  videoEl.removeEventListener('seeked', syncSeekHandler);
+  videoEl.removeEventListener('ended', endedHandler);
+  videoEl.pause();
+  videoEl.removeAttribute('src');
+  videoEl.load();
+
+  // Clean up YouTube player
+  if (player && player.isYouTube && player._yt) {
+    player._yt.destroy();
+    ytPlayerWrap.innerHTML = '<div id="yt-player"></div>';
+  }
+
+  syncEventsBound = false;
+  player = null;
+  pendingSyncState = null;
+}
+
 function initHTML5Player(url) {
+  destroyCurrentPlayer();
   videoEl.hidden = false;
   ytPlayerWrap.hidden = true;
   videoEl.src = url;
@@ -114,6 +136,7 @@ function initHTML5Player(url) {
 }
 
 function initYouTubePlayer(videoId, onReady) {
+  destroyCurrentPlayer();
   videoEl.hidden = true;
   ytPlayerWrap.hidden = false;
 
@@ -209,22 +232,6 @@ function endedHandler() {
 }
 
 function switchVideo(url, onReady) {
-  // Clean up old HTML5 listeners
-  videoEl.removeEventListener('play', syncPlayHandler);
-  videoEl.removeEventListener('pause', syncPauseHandler);
-  videoEl.removeEventListener('seeked', syncSeekHandler);
-  videoEl.removeEventListener('ended', endedHandler);
-
-  // Clean up old YouTube player
-  if (player && player.isYouTube && player._yt) {
-    player._yt.destroy();
-    ytPlayerWrap.innerHTML = '<div id="yt-player"></div>';
-  }
-
-  syncEventsBound = false;
-  player = null;
-  pendingSyncState = null;
-
   initPlayer(url, () => {
     bindSyncEvents();
     bindEndedEvent();
