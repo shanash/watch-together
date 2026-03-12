@@ -83,7 +83,7 @@ const roomSubStatus = document.getElementById('room-sub-status');
 let syncCooldown = false;
 let syncCooldownTimer = null;
 let syncEventsBound = false;
-const SYNC_COOLDOWN_MS = 300;
+const SYNC_COOLDOWN_MS = 800;
 let roomId = sessionStorage.getItem('wt-roomId');
 let nickname = sessionStorage.getItem('wt-nickname');
 const action = sessionStorage.getItem('wt-action');
@@ -275,13 +275,16 @@ function initYouTubePlayer(videoId, onReady) {
 
 // Named handlers for cleanup
 function syncPlayHandler() {
-  if (!syncCooldown) socket.emit('sync-play', { currentTime: player.currentTime });
+  if (syncCooldown) { extendSyncCooldown(); return; }
+  socket.emit('sync-play', { currentTime: player.currentTime });
 }
 function syncPauseHandler() {
-  if (!syncCooldown) socket.emit('sync-pause', { currentTime: player.currentTime });
+  if (syncCooldown) { extendSyncCooldown(); return; }
+  socket.emit('sync-pause', { currentTime: player.currentTime });
 }
 function syncSeekHandler() {
-  if (!syncCooldown) socket.emit('sync-seek', { currentTime: player.currentTime });
+  if (syncCooldown) { extendSyncCooldown(); return; }
+  socket.emit('sync-seek', { currentTime: player.currentTime });
 }
 function endedHandler() {
   socket.emit('video-ended', { index: currentIndex });
@@ -419,8 +422,8 @@ socket.on('sync-play', ({ currentTime }) => {
 socket.on('sync-pause', ({ currentTime }) => {
   if (!player) return;
   startSyncCooldown();
-  player.currentTime = currentTime;
   player.pause();
+  player.currentTime = currentTime;
   showSyncNotice();
 });
 
@@ -631,6 +634,15 @@ function startSyncCooldown() {
   syncCooldown = true;
   clearTimeout(syncCooldownTimer);
   syncCooldownTimer = setTimeout(() => { syncCooldown = false; }, SYNC_COOLDOWN_MS);
+}
+
+// Extend cooldown — call this when a player event fires during cooldown
+// to prevent the event from leaking out after cooldown expires
+function extendSyncCooldown() {
+  if (syncCooldown) {
+    clearTimeout(syncCooldownTimer);
+    syncCooldownTimer = setTimeout(() => { syncCooldown = false; }, SYNC_COOLDOWN_MS);
+  }
 }
 
 function bindSyncEvents() {
