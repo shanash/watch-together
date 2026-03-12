@@ -525,8 +525,9 @@ socket.on('user-network', ({ nickname: name, latency }) => {
 
 // --- Copy Room Code ---
 copyCodeBtn.addEventListener('click', () => {
-  navigator.clipboard.writeText(roomId).then(() => {
-    copyCodeBtn.textContent = '복사됨!';
+  const joinUrl = `${window.location.origin}/join/${roomId}`;
+  navigator.clipboard.writeText(joinUrl).then(() => {
+    copyCodeBtn.textContent = '링크 복사됨!';
     setTimeout(() => { copyCodeBtn.textContent = '복사'; }, 1500);
   });
 });

@@ -39,6 +39,11 @@ app.use(express.static(join(__dirname, 'public')));
 app.use('/ffmpeg', express.static(join(__dirname, 'node_modules/@ffmpeg/ffmpeg/dist/umd')));
 app.use('/ffmpeg-util', express.static(join(__dirname, 'node_modules/@ffmpeg/util/dist/umd')));
 
+// --- Direct join URL ---
+app.get('/join/:roomId', (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'join.html'));
+});
+
 // --- Version API ---
 app.get('/api/version', (req, res) => {
   res.json({ version: BUILD_VERSION, buildTime: BUILD_TIME });

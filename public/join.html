@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Watch Together - 참가</title>
+  <link rel="stylesheet" href="/css/style.css">
+</head>
+<body>
+  <div class="container">
+    <h1>Watch Together</h1>
+    <p class="subtitle">방에 참가하기</p>
+
+    <div class="card" style="max-width: 400px; margin: 0 auto;">
+      <h2>방 코드: <strong id="room-code"></strong></h2>
+      <form id="join-form">
+        <input type="text" id="join-nickname" placeholder="닉네임" required maxlength="20" autofocus>
+        <button type="submit">참가하기</button>
+      </form>
+    </div>
+
+    <div id="error-msg" class="error" hidden></div>
+  </div>
+
+  <script>
+    const roomId = window.location.pathname.split('/join/')[1];
+    document.getElementById('room-code').textContent = roomId;
+
+    document.getElementById('join-form').addEventListener('submit', (e) => {
+      e.preventDefault();
+      const nickname = document.getElementById('join-nickname').value.trim();
+      if (!nickname) return;
+
+      sessionStorage.setItem('wt-action', 'join');
+      sessionStorage.setItem('wt-nickname', nickname);
+      sessionStorage.setItem('wt-roomId', roomId);
+      window.location.href = '/room.html';
+    });
+  </script>
+</body>
+</html>
