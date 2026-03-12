@@ -76,6 +76,9 @@ const playlistFileInput = document.getElementById('playlist-file');
 const plUploadProgress = document.getElementById('playlist-upload-progress');
 const plProgressBar = document.getElementById('playlist-progress-bar');
 const plProgressText = document.getElementById('playlist-progress-text');
+const roomSubFileInput = document.getElementById('room-sub-file');
+const roomSubLabel = document.getElementById('room-sub-label');
+const roomSubStatus = document.getElementById('room-sub-status');
 
 let syncCooldown = false;
 let syncCooldownTimer = null;
@@ -835,4 +838,74 @@ subToggle.addEventListener('click', () => {
       subToggle.textContent = '자막 끄기';
     }
   }
+});
+
+// --- Room Subtitle Upload ---
+roomSubFileInput.addEventListener('change', async () => {
+  const file = roomSubFileInput.files[0];
+  if (!file) return;
+
+  if (player && player.isYouTube) {
+    statusMsg.textContent = 'YouTube 영상에는 자막을 적용할 수 없습니다.';
+    roomSubFileInput.value = '';
+    return;
+  }
+
+  roomSubStatus.hidden = true;
+  roomSubLabel.querySelector('span').textContent = file.name;
+
+  try {
+    // Read and decode (handle EUC-KR)
+    const buffer = await file.arrayBuffer();
+    let text = new TextDecoder('utf-8').decode(buffer);
+    if (text.includes('\uFFFD')) {
+      try { text = new TextDecoder('euc-kr').decode(buffer); } catch {}
+    }
+
+    // Get presigned URL
+    const res = await fetch('/api/presign-subtitle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ filename: file.name }),
+    });
+
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error);
+    }
+
+    const { presignedUrl, publicUrl } = await res.json();
+
+    // Upload decoded text as UTF-8
+    const putRes = await fetch(presignedUrl, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'text/plain' },
+      body: new Blob([text], { type: 'text/plain' }),
+    });
+
+    if (!putRes.ok) throw new Error('자막 업로드 실패');
+
+    // Apply locally
+    loadSubtitle(publicUrl);
+
+    // Share with other participants
+    socket.emit('subtitle-update', { subtitleUrl: publicUrl });
+
+    roomSubStatus.textContent = '자막 적용 완료!';
+    roomSubStatus.className = 'upload-status success';
+    roomSubStatus.hidden = false;
+  } catch (err) {
+    roomSubStatus.textContent = err.message;
+    roomSubStatus.className = 'upload-status fail';
+    roomSubStatus.hidden = false;
+  } finally {
+    roomSubFileInput.value = '';
+  }
+});
+
+// --- Receive subtitle from others ---
+socket.on('subtitle-updated', ({ subtitleUrl }) => {
+  if (player && player.isYouTube) return;
+  statusMsg.textContent = '자막이 적용되었습니다.';
+  loadSubtitle(subtitleUrl);
 });

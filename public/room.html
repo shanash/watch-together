@@ -56,7 +56,17 @@
           </div>
         </div>
 
-        <button id="sub-toggle" class="sub-toggle" hidden>자막 끄기</button>
+        <div class="sidebar-section subtitle-section">
+          <h3>자막</h3>
+          <div class="subtitle-controls">
+            <label class="subtitle-file-label" id="room-sub-label">
+              <span>자막 파일 선택 (.smi, .srt, .vtt)</span>
+              <input type="file" id="room-sub-file" accept=".smi,.srt,.vtt" hidden>
+            </label>
+            <div id="room-sub-status" class="upload-status" hidden></div>
+            <button id="sub-toggle" class="sub-toggle" hidden>자막 끄기</button>
+          </div>
+        </div>
 
         <div id="status-area">
           <p id="status-msg">연결 중...</p>

@@ -349,6 +349,16 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('sync-seek', { currentTime });
   });
 
+  // --- Subtitle Update ---
+  socket.on('subtitle-update', ({ subtitleUrl }) => {
+    const roomId = socket.data.roomId;
+    const room = rooms.get(roomId);
+    if (!room) return;
+    room.subtitleUrl = subtitleUrl;
+    socket.to(roomId).emit('subtitle-updated', { subtitleUrl });
+    log.info('room', 'Subtitle updated', { roomId, nickname: socket.data.nickname, subtitleUrl });
+  });
+
   // --- Playlist Events ---
   socket.on('playlist-add', async ({ url }) => {
     const roomId = socket.data.roomId;

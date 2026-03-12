@@ -445,6 +445,33 @@ button:disabled {
   height: 20px;
 }
 
+.subtitle-section {
+  border-top: 1px solid #333;
+  padding-top: 16px;
+}
+
+.subtitle-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.subtitle-file-label {
+  display: block;
+  padding: 8px;
+  font-size: 0.8rem;
+  background: #252525;
+  border-radius: 6px;
+  text-align: center;
+  cursor: pointer;
+  color: #aaa;
+  transition: background 0.2s;
+}
+
+.subtitle-file-label:hover {
+  background: #333;
+}
+
 .sub-toggle {
   padding: 8px;
   font-size: 0.85rem;
