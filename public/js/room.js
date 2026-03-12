@@ -268,6 +268,13 @@ socket.on('room-created', ({ roomId: id, playlist: pl, currentIndex: idx }) => {
     return;
   }
 
+  updateUserList([nickname]);
+
+  if (playlist.length === 0) {
+    statusMsg.textContent = '방이 생성되었습니다. 플레이리스트에 영상을 추가하세요.';
+    return;
+  }
+
   statusMsg.textContent = '방이 생성되었습니다. 영상을 재생하세요.';
 
   const videoUrl = playlist[currentIndex].url;
@@ -277,8 +284,6 @@ socket.on('room-created', ({ roomId: id, playlist: pl, currentIndex: idx }) => {
     bindEndedEvent();
     bindKeyboardControls();
   });
-
-  updateUserList([nickname]);
 
   // Load subtitle if available (HTML5 only)
   const subUrl = sessionStorage.getItem('wt-subtitleUrl');
@@ -313,6 +318,8 @@ socket.on('room-joined', ({ room, playbackState }) => {
 
   // First join: initialize player
   statusMsg.textContent = '방에 참가했습니다.';
+
+  if (playlist.length === 0) return;
 
   const videoUrl = playlist[currentIndex].url;
   const isYT = !!getYouTubeVideoId(videoUrl);
@@ -368,9 +375,21 @@ socket.on('sync-state', (state) => {
 
 // --- Playlist Events ---
 socket.on('playlist-updated', ({ playlist: pl, currentIndex: idx }) => {
+  const wasEmpty = playlist.length === 0;
   playlist = pl;
   currentIndex = idx;
   renderPlaylist();
+
+  // If player wasn't initialized yet and now we have videos, start the first one
+  if (wasEmpty && playlist.length > 0 && !player) {
+    const videoUrl = playlist[currentIndex].url;
+    statusMsg.textContent = '영상이 추가되었습니다.';
+    initPlayer(videoUrl, () => {
+      bindSyncEvents();
+      bindEndedEvent();
+      bindKeyboardControls();
+    });
+  }
 });
 
 socket.on('playlist-switch', ({ url, index }) => {
@@ -404,7 +423,7 @@ socket.on('error-msg', ({ message, fatal }) => {
     if (action === 'host' && !isFirstConnect) {
       const videoUrl = sessionStorage.getItem('wt-videoUrl');
       const subtitleUrl = sessionStorage.getItem('wt-subtitleUrl') || null;
-      socket.emit('create-room', { nickname, videoUrl, subtitleUrl });
+      socket.emit('create-room', { nickname, videoUrl, subtitleUrl, requestedRoomId: roomId });
       return;
     }
     setTimeout(() => { window.location.href = '/'; }, 2000);

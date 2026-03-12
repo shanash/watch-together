@@ -265,23 +265,15 @@ createForm.addEventListener('submit', (e) => {
   const nickname = document.getElementById('create-nickname').value.trim();
   if (!nickname) return;
 
-  let videoUrl;
+  let videoUrl = '';
   if (activeTab === 'url') {
     videoUrl = videoUrlInput.value.trim();
-    if (!videoUrl) {
-      showError('영상 URL을 입력해주세요.');
-      return;
-    }
   } else {
     if (isUploading) {
       showError('업로드가 진행 중입니다. 잠시 기다려주세요.');
       return;
     }
-    if (!uploadedUrl) {
-      showError('영상 파일을 먼저 업로드해주세요.');
-      return;
-    }
-    videoUrl = uploadedUrl;
+    videoUrl = uploadedUrl || '';
   }
 
   // Store data and navigate directly (room creation happens in room.js)

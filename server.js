@@ -130,11 +130,15 @@ io.on('connection', (socket) => {
   log.info('socket', 'Client connected', { socketId: socket.id });
 
   // --- Create Room ---
-  socket.on('create-room', ({ nickname, videoUrl, subtitleUrl }) => {
-    const roomId = generateRoomId();
-    const title = videoUrl.split('/').pop().split('?')[0] || 'Video';
+  socket.on('create-room', ({ nickname, videoUrl, subtitleUrl, requestedRoomId }) => {
+    const roomId = (requestedRoomId && !rooms.has(requestedRoomId)) ? requestedRoomId : generateRoomId();
+    const playlist = [];
+    if (videoUrl) {
+      const title = videoUrl.split('/').pop().split('?')[0] || 'Video';
+      playlist.push({ url: videoUrl, title, addedBy: nickname });
+    }
     const room = {
-      playlist: [{ url: videoUrl, title, addedBy: nickname }],
+      playlist,
       currentIndex: 0,
       subtitleUrl: subtitleUrl || null,
       users: [{ id: socket.id, nickname }],
@@ -337,7 +341,7 @@ io.on('connection', (socket) => {
 
     // If no users left, schedule room deletion with grace period
     if (room.users.length === 0) {
-      const GRACE_PERIOD = 60000; // 60 seconds
+      const GRACE_PERIOD = 300000; // 5 minutes
       log.info('room', 'Room empty, scheduled for deletion', { roomId, graceMs: GRACE_PERIOD });
       room.deleteTimeout = setTimeout(() => {
         if (room.users.length === 0) {
