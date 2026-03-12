@@ -513,7 +513,6 @@ playlistAddUrlBtn.addEventListener('click', async () => {
         statusMsg.textContent = result.error;
         return;
       }
-      socket.emit('playlist-add', { url, title: result.title });
     } catch {
       statusMsg.textContent = 'YouTube 영상을 확인할 수 없습니다.';
       return;
@@ -521,10 +520,8 @@ playlistAddUrlBtn.addEventListener('click', async () => {
       playlistAddUrlBtn.disabled = false;
       playlistAddUrlBtn.textContent = '추가';
     }
-  } else {
-    const title = url.split('/').pop().split('?')[0] || 'Video';
-    socket.emit('playlist-add', { url, title });
   }
+  socket.emit('playlist-add', { url });
   playlistUrlInput.value = '';
 });
 
@@ -584,7 +581,7 @@ playlistFileInput.addEventListener('change', async () => {
       xhr.send(file);
     });
 
-    socket.emit('playlist-add', { url: publicUrl, title: file.name });
+    socket.emit('playlist-add', { url: publicUrl });
   } catch (err) {
     statusMsg.textContent = err.message;
   } finally {

@@ -157,15 +157,42 @@ function generateRoomId() {
   return nanoid(6);
 }
 
+function getYouTubeVideoId(url) {
+  const match = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([^&?#/]+)/
+  );
+  return match ? match[1] : null;
+}
+
+async function fetchVideoTitle(url) {
+  if (getYouTubeVideoId(url)) {
+    try {
+      const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+      const resp = await fetch(oembedUrl);
+      if (resp.ok) {
+        const data = await resp.json();
+        return data.title;
+      }
+    } catch {}
+  }
+  // Fallback: decode URL filename without extension
+  try {
+    const filename = decodeURIComponent(url.split('/').pop().split('?')[0]);
+    return filename.replace(/\.[^.]+$/, '') || 'Video';
+  } catch {
+    return 'Video';
+  }
+}
+
 io.on('connection', (socket) => {
   log.info('socket', 'Client connected', { socketId: socket.id });
 
   // --- Create Room ---
-  socket.on('create-room', ({ nickname, videoUrl, subtitleUrl, requestedRoomId }) => {
+  socket.on('create-room', async ({ nickname, videoUrl, subtitleUrl, requestedRoomId }) => {
     const roomId = (requestedRoomId && !rooms.has(requestedRoomId)) ? requestedRoomId : generateRoomId();
     const playlist = [];
     if (videoUrl) {
-      const title = videoUrl.split('/').pop().split('?')[0] || 'Video';
+      const title = await fetchVideoTitle(videoUrl);
       playlist.push({ url: videoUrl, title, addedBy: nickname });
     }
     const room = {
@@ -272,7 +299,7 @@ io.on('connection', (socket) => {
   });
 
   // --- Playlist Events ---
-  socket.on('playlist-add', ({ url, title }) => {
+  socket.on('playlist-add', async ({ url }) => {
     const roomId = socket.data.roomId;
     const room = rooms.get(roomId);
     if (!room) return;
@@ -280,6 +307,7 @@ io.on('connection', (socket) => {
       socket.emit('error-msg', { message: '재생목록은 최대 100개까지 추가할 수 있습니다.' });
       return;
     }
+    const title = await fetchVideoTitle(url);
     room.playlist.push({ url, title, addedBy: socket.data.nickname });
     io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
   });
