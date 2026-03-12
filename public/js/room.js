@@ -677,14 +677,31 @@ function renderPlaylist() {
   playlistEl.innerHTML = '';
   playlist.forEach((item, i) => {
     const li = document.createElement('li');
-    li.textContent = item.title;
     li.title = `${item.title} (${item.addedBy})`;
     if (i === currentIndex) li.classList.add('active');
-    li.addEventListener('click', () => {
+
+    const titleSpan = document.createElement('span');
+    titleSpan.className = 'playlist-title';
+    titleSpan.textContent = item.title;
+    titleSpan.addEventListener('click', () => {
       if (i !== currentIndex) {
         socket.emit('playlist-play', { index: i });
       }
     });
+    li.appendChild(titleSpan);
+
+    if (i !== currentIndex) {
+      const removeBtn = document.createElement('button');
+      removeBtn.className = 'playlist-remove';
+      removeBtn.textContent = '×';
+      removeBtn.title = '삭제';
+      removeBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        socket.emit('playlist-remove', { index: i });
+      });
+      li.appendChild(removeBtn);
+    }
+
     playlistEl.appendChild(li);
   });
   // Scroll active into view

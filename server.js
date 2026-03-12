@@ -312,6 +312,23 @@ io.on('connection', (socket) => {
     io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
   });
 
+  socket.on('playlist-remove', ({ index }) => {
+    const roomId = socket.data.roomId;
+    const room = rooms.get(roomId);
+    if (!room || index < 0 || index >= room.playlist.length) return;
+    // Don't allow removing the currently playing item
+    if (index === room.currentIndex) {
+      socket.emit('error-msg', { message: '현재 재생 중인 영상은 삭제할 수 없습니다.' });
+      return;
+    }
+    room.playlist.splice(index, 1);
+    // Adjust currentIndex if a preceding item was removed
+    if (index < room.currentIndex) {
+      room.currentIndex--;
+    }
+    io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
+  });
+
   socket.on('playlist-play', ({ index }) => {
     const roomId = socket.data.roomId;
     const room = rooms.get(roomId);
