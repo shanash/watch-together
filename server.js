@@ -354,6 +354,18 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('sync-seek', { currentTime });
   });
 
+  // --- Chat ---
+  socket.on('chat-message', ({ message }) => {
+    const roomId = socket.data.roomId;
+    if (!roomId || !message || !message.trim()) return;
+    const msg = message.trim().slice(0, 200);
+    io.in(roomId).emit('chat-message', {
+      nickname: socket.data.nickname,
+      message: msg,
+      timestamp: Date.now(),
+    });
+  });
+
   // --- Subtitle Update ---
   socket.on('subtitle-update', ({ subtitleUrl }) => {
     const roomId = socket.data.roomId;

@@ -70,15 +70,27 @@ const statusMsg = document.getElementById('status-msg');
 const syncNotice = document.getElementById('sync-notice');
 const subToggle = document.getElementById('sub-toggle');
 const playlistEl = document.getElementById('playlist');
-const playlistUrlInput = document.getElementById('playlist-url');
-const playlistAddUrlBtn = document.getElementById('playlist-add-url');
-const playlistFileInput = document.getElementById('playlist-file');
-const plUploadProgress = document.getElementById('playlist-upload-progress');
-const plProgressBar = document.getElementById('playlist-progress-bar');
-const plProgressText = document.getElementById('playlist-progress-text');
-const roomSubFileInput = document.getElementById('room-sub-file');
-const roomSubLabel = document.getElementById('room-sub-label');
-const roomSubStatus = document.getElementById('room-sub-status');
+
+// Modal elements
+const playlistAddBtn = document.getElementById('playlist-add-btn');
+const playlistModal = document.getElementById('playlist-modal');
+const modalClose = document.getElementById('modal-close');
+const modalUrlInput = document.getElementById('modal-url-input');
+const modalUrlAddBtn = document.getElementById('modal-url-add');
+const modalVideoFile = document.getElementById('modal-video-file');
+const modalVideoLabel = document.getElementById('modal-video-label');
+const modalSubFile = document.getElementById('modal-sub-file');
+const modalSubLabel = document.getElementById('modal-sub-label');
+const modalFileAddBtn = document.getElementById('modal-file-add');
+const modalUploadProgress = document.getElementById('modal-upload-progress');
+const modalProgressBar = document.getElementById('modal-progress-bar');
+const modalProgressText = document.getElementById('modal-progress-text');
+const modalStatus = document.getElementById('modal-status');
+
+// Chat elements
+const chatMessages = document.getElementById('chat-messages');
+const chatInput = document.getElementById('chat-input');
+const chatSendBtn = document.getElementById('chat-send');
 
 let syncCooldown = false;
 let syncCooldownTimer = null;
@@ -532,15 +544,46 @@ copyCodeBtn.addEventListener('click', () => {
   });
 });
 
-// --- Playlist Add (URL) ---
-playlistAddUrlBtn.addEventListener('click', async () => {
-  const url = playlistUrlInput.value.trim();
+// === Playlist Add Modal ===
+let modalActiveTab = 'modal-url';
+
+playlistAddBtn.addEventListener('click', () => {
+  playlistModal.hidden = false;
+  modalUrlInput.focus();
+});
+
+modalClose.addEventListener('click', () => { playlistModal.hidden = true; });
+playlistModal.addEventListener('click', (e) => {
+  if (e.target === playlistModal) playlistModal.hidden = true;
+});
+
+// Modal tabs
+document.querySelectorAll('[data-modal-tab]').forEach((tab) => {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('[data-modal-tab]').forEach((t) => t.classList.remove('active'));
+    tab.classList.add('active');
+    modalActiveTab = tab.dataset.modalTab;
+    document.querySelectorAll('.modal-tab-content').forEach((c) => c.classList.remove('active'));
+    document.getElementById(modalActiveTab).classList.add('active');
+  });
+});
+
+function showModalStatus(msg, type) {
+  modalStatus.textContent = msg;
+  modalStatus.className = `upload-status ${type}`;
+  modalStatus.hidden = false;
+  if (type === 'success') setTimeout(() => { modalStatus.hidden = true; }, 2000);
+}
+
+// Modal: URL add
+modalUrlAddBtn.addEventListener('click', async () => {
+  const url = modalUrlInput.value.trim();
   if (!url) return;
   const ytId = getYouTubeVideoId(url);
 
   if (ytId) {
-    playlistAddUrlBtn.disabled = true;
-    playlistAddUrlBtn.textContent = '확인 중...';
+    modalUrlAddBtn.disabled = true;
+    modalUrlAddBtn.textContent = '확인 중...';
     try {
       const res = await fetch('/api/validate-youtube', {
         method: 'POST',
@@ -549,84 +592,149 @@ playlistAddUrlBtn.addEventListener('click', async () => {
       });
       const result = await res.json();
       if (!result.valid) {
-        statusMsg.textContent = result.error;
+        showModalStatus(result.error, 'fail');
         return;
       }
     } catch {
-      statusMsg.textContent = 'YouTube 영상을 확인할 수 없습니다.';
+      showModalStatus('YouTube 영상을 확인할 수 없습니다.', 'fail');
       return;
     } finally {
-      playlistAddUrlBtn.disabled = false;
-      playlistAddUrlBtn.textContent = '추가';
+      modalUrlAddBtn.disabled = false;
+      modalUrlAddBtn.textContent = '추가';
     }
   }
   socket.emit('playlist-add', { url });
-  playlistUrlInput.value = '';
+  modalUrlInput.value = '';
+  showModalStatus('추가되었습니다!', 'success');
 });
 
-playlistUrlInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') playlistAddUrlBtn.click();
+modalUrlInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') modalUrlAddBtn.click();
 });
 
-// --- Playlist Add (File Upload) ---
-playlistFileInput.addEventListener('change', async () => {
-  const file = playlistFileInput.files[0];
-  if (!file) return;
+// Modal: file labels
+modalVideoFile.addEventListener('change', () => {
+  const file = modalVideoFile.files[0];
+  if (file) modalVideoLabel.querySelector('span').textContent = file.name;
+});
 
-  const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
-  if (file.size > MAX_FILE_SIZE) {
-    statusMsg.textContent = '파일 크기는 2GB 이하여야 합니다.';
-    playlistFileInput.value = '';
+modalSubFile.addEventListener('change', () => {
+  const file = modalSubFile.files[0];
+  if (file) modalSubLabel.querySelector('span').textContent = file.name;
+});
+
+// Modal: file upload
+modalFileAddBtn.addEventListener('click', async () => {
+  const videoFile = modalVideoFile.files[0];
+  if (!videoFile) {
+    showModalStatus('영상 파일을 선택하세요.', 'fail');
     return;
   }
 
-  plUploadProgress.hidden = false;
-  plProgressBar.style.width = '0%';
-  plProgressText.textContent = '0%';
+  const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
+  if (videoFile.size > MAX_FILE_SIZE) {
+    showModalStatus('파일 크기는 2GB 이하여야 합니다.', 'fail');
+    return;
+  }
+
+  modalFileAddBtn.disabled = true;
+  modalUploadProgress.hidden = false;
+  modalProgressBar.style.width = '0%';
+  modalProgressText.textContent = '0%';
+  modalStatus.hidden = true;
 
   try {
+    // Upload video
     const res = await fetch('/api/presign', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: file.name, contentType: file.type || 'video/mp4' }),
+      body: JSON.stringify({ filename: videoFile.name, contentType: videoFile.type || 'video/mp4' }),
     });
-
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error || '업로드 URL 생성 실패');
-    }
-
+    if (!res.ok) throw new Error((await res.json()).error || '업로드 URL 생성 실패');
     const { presignedUrl, publicUrl } = await res.json();
 
     await new Promise((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.open('PUT', presignedUrl);
-      xhr.setRequestHeader('Content-Type', file.type || 'video/mp4');
-
+      xhr.setRequestHeader('Content-Type', videoFile.type || 'video/mp4');
       xhr.upload.onprogress = (e) => {
         if (e.lengthComputable) {
           const pct = Math.round((e.loaded / e.total) * 100);
-          plProgressBar.style.width = `${pct}%`;
-          plProgressText.textContent = `${pct}%`;
+          modalProgressBar.style.width = `${pct}%`;
+          modalProgressText.textContent = `${pct}%`;
         }
       };
-
-      xhr.onload = () => {
-        if (xhr.status >= 200 && xhr.status < 300) resolve();
-        else reject(new Error(`업로드 실패 (HTTP ${xhr.status})`));
-      };
-
+      xhr.onload = () => xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`HTTP ${xhr.status}`));
       xhr.onerror = () => reject(new Error('네트워크 오류'));
-      xhr.send(file);
+      xhr.send(videoFile);
     });
 
     socket.emit('playlist-add', { url: publicUrl });
+
+    // Upload subtitle if selected
+    const subFile = modalSubFile.files[0];
+    if (subFile) {
+      const buffer = await subFile.arrayBuffer();
+      let text = new TextDecoder('utf-8').decode(buffer);
+      if (text.includes('\uFFFD')) {
+        try { text = new TextDecoder('euc-kr').decode(buffer); } catch {}
+      }
+      const subRes = await fetch('/api/presign-subtitle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ filename: subFile.name }),
+      });
+      if (subRes.ok) {
+        const { presignedUrl: subPresign, publicUrl: subPublicUrl } = await subRes.json();
+        await fetch(subPresign, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'text/plain' },
+          body: new Blob([text], { type: 'text/plain' }),
+        });
+        socket.emit('subtitle-update', { subtitleUrl: subPublicUrl });
+        loadSubtitle(subPublicUrl);
+      }
+    }
+
+    showModalStatus('추가 완료!', 'success');
+    // Reset
+    modalVideoFile.value = '';
+    modalSubFile.value = '';
+    modalVideoLabel.querySelector('span').textContent = '영상 파일 선택 (.mp4, .webm)';
+    modalSubLabel.querySelector('span').textContent = '자막 파일 선택 (.smi, .srt, .vtt) - 선택사항';
   } catch (err) {
-    statusMsg.textContent = err.message;
+    showModalStatus(err.message, 'fail');
   } finally {
-    plUploadProgress.hidden = true;
-    playlistFileInput.value = '';
+    modalFileAddBtn.disabled = false;
+    modalUploadProgress.hidden = true;
   }
+});
+
+// === Chat ===
+chatSendBtn.addEventListener('click', () => {
+  const message = chatInput.value.trim();
+  if (!message) return;
+  socket.emit('chat-message', { message });
+  chatInput.value = '';
+});
+
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') chatSendBtn.click();
+});
+
+socket.on('chat-message', ({ nickname: name, message, timestamp }) => {
+  const div = document.createElement('div');
+  div.className = 'chat-msg';
+
+  const time = new Date(timestamp).toLocaleTimeString('ko-KR', { hour: '2-digit', minute: '2-digit' });
+  const isMe = name === nickname;
+  div.classList.toggle('chat-msg-mine', isMe);
+
+  const safeName = (isMe ? '나' : name).replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  const safeMsg = message.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+  div.innerHTML = `<span class="chat-nick">${safeName}</span> <span class="chat-time">${time}</span><div class="chat-text">${safeMsg}</div>`;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
 });
 
 // === Helper Functions ===
@@ -850,69 +958,6 @@ subToggle.addEventListener('click', () => {
       track.mode = 'showing';
       subToggle.textContent = '자막 끄기';
     }
-  }
-});
-
-// --- Room Subtitle Upload ---
-roomSubFileInput.addEventListener('change', async () => {
-  const file = roomSubFileInput.files[0];
-  if (!file) return;
-
-  if (player && player.isYouTube) {
-    statusMsg.textContent = 'YouTube 영상에는 자막을 적용할 수 없습니다.';
-    roomSubFileInput.value = '';
-    return;
-  }
-
-  roomSubStatus.hidden = true;
-  roomSubLabel.querySelector('span').textContent = file.name;
-
-  try {
-    // Read and decode (handle EUC-KR)
-    const buffer = await file.arrayBuffer();
-    let text = new TextDecoder('utf-8').decode(buffer);
-    if (text.includes('\uFFFD')) {
-      try { text = new TextDecoder('euc-kr').decode(buffer); } catch {}
-    }
-
-    // Get presigned URL
-    const res = await fetch('/api/presign-subtitle', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ filename: file.name }),
-    });
-
-    if (!res.ok) {
-      const data = await res.json();
-      throw new Error(data.error);
-    }
-
-    const { presignedUrl, publicUrl } = await res.json();
-
-    // Upload decoded text as UTF-8
-    const putRes = await fetch(presignedUrl, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'text/plain' },
-      body: new Blob([text], { type: 'text/plain' }),
-    });
-
-    if (!putRes.ok) throw new Error('자막 업로드 실패');
-
-    // Apply locally
-    loadSubtitle(publicUrl);
-
-    // Share with other participants
-    socket.emit('subtitle-update', { subtitleUrl: publicUrl });
-
-    roomSubStatus.textContent = '자막 적용 완료!';
-    roomSubStatus.className = 'upload-status success';
-    roomSubStatus.hidden = false;
-  } catch (err) {
-    roomSubStatus.textContent = err.message;
-    roomSubStatus.className = 'upload-status fail';
-    roomSubStatus.hidden = false;
-  } finally {
-    roomSubFileInput.value = '';
   }
 });
 

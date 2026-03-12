@@ -32,45 +32,77 @@
 
       <!-- Sidebar -->
       <div class="sidebar">
+        <!-- Participants -->
         <div class="sidebar-section">
           <h3>참가자 <span id="user-count">0</span>명</h3>
           <ul id="user-list"></ul>
         </div>
 
+        <!-- Playlist -->
         <div class="sidebar-section playlist-section">
-          <h3>재생목록</h3>
-          <ul id="playlist"></ul>
-          <div class="playlist-add">
-            <input type="text" id="playlist-url" placeholder="URL 입력">
-            <div class="playlist-add-btns">
-              <button id="playlist-add-url">추가</button>
-              <label class="playlist-file-label">
-                <input type="file" id="playlist-file" accept=".mp4,.webm" hidden>
-                파일
-              </label>
-            </div>
-            <div id="playlist-upload-progress" class="progress-wrap" hidden>
-              <div id="playlist-progress-bar" class="progress-bar"></div>
-              <span id="playlist-progress-text" class="progress-text">0%</span>
-            </div>
+          <div class="playlist-header">
+            <h3>재생목록</h3>
+            <button id="playlist-add-btn" class="playlist-add-btn" title="추가">+</button>
           </div>
+          <ul id="playlist"></ul>
+          <button id="sub-toggle" class="sub-toggle" hidden>자막 끄기</button>
         </div>
 
-        <div class="sidebar-section subtitle-section">
-          <h3>자막</h3>
-          <div class="subtitle-controls">
-            <label class="subtitle-file-label" id="room-sub-label">
-              <span>자막 파일 선택 (.smi, .srt, .vtt)</span>
-              <input type="file" id="room-sub-file" accept=".smi,.srt,.vtt" hidden>
-            </label>
-            <div id="room-sub-status" class="upload-status" hidden></div>
-            <button id="sub-toggle" class="sub-toggle" hidden>자막 끄기</button>
+        <!-- Chat -->
+        <div class="sidebar-section chat-section">
+          <h3>채팅</h3>
+          <div id="chat-messages" class="chat-messages"></div>
+          <div class="chat-input-wrap">
+            <input type="text" id="chat-input" placeholder="메시지 입력..." maxlength="200" autocomplete="off">
+            <button id="chat-send">전송</button>
           </div>
         </div>
 
         <div id="status-area">
           <p id="status-msg">연결 중...</p>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Playlist Add Modal -->
+  <div id="playlist-modal" class="modal-overlay" hidden>
+    <div class="modal">
+      <div class="modal-header">
+        <h3>재생목록에 추가</h3>
+        <button id="modal-close" class="modal-close">&times;</button>
+      </div>
+      <div class="modal-body">
+        <!-- Tabs -->
+        <div class="tabs">
+          <button type="button" class="tab active" data-modal-tab="modal-url">URL 입력</button>
+          <button type="button" class="tab" data-modal-tab="modal-file">파일 업로드</button>
+        </div>
+
+        <!-- URL tab -->
+        <div id="modal-url" class="modal-tab-content active">
+          <input type="text" id="modal-url-input" placeholder="YouTube 또는 영상 URL">
+          <button id="modal-url-add">추가</button>
+        </div>
+
+        <!-- File tab -->
+        <div id="modal-file" class="modal-tab-content">
+          <label class="file-label" id="modal-video-label">
+            <span>영상 파일 선택 (.mp4, .webm)</span>
+            <input type="file" id="modal-video-file" accept=".mp4,.webm" hidden>
+          </label>
+          <label class="file-label" id="modal-sub-label">
+            <span>자막 파일 선택 (.smi, .srt, .vtt) - 선택사항</span>
+            <input type="file" id="modal-sub-file" accept=".smi,.srt,.vtt" hidden>
+          </label>
+          <div id="modal-upload-progress" class="progress-wrap" hidden>
+            <div id="modal-progress-bar" class="progress-bar"></div>
+            <span id="modal-progress-text" class="progress-text">0%</span>
+          </div>
+          <button id="modal-file-add">업로드 및 추가</button>
+        </div>
+
+        <div id="modal-status" class="upload-status" hidden></div>
       </div>
     </div>
   </div>

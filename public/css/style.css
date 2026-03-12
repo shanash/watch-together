@@ -298,13 +298,13 @@ button:disabled {
 }
 
 .sidebar {
-  width: 240px;
+  width: 280px;
   background: #1a1a1a;
   border-left: 1px solid #333;
-  padding: 20px;
+  padding: 16px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
   overflow-y: auto;
 }
 
@@ -406,75 +406,26 @@ button:disabled {
   border-left: 3px solid #646cff;
 }
 
-.playlist-add {
+.playlist-header {
   display: flex;
-  flex-direction: column;
-  gap: 6px;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.playlist-add input[type="text"] {
-  padding: 8px 10px;
-  font-size: 0.8rem;
-}
-
-.playlist-add-btns {
-  display: flex;
-  gap: 6px;
-}
-
-.playlist-add-btns button,
-.playlist-file-label {
-  flex: 1;
-  padding: 6px;
-  font-size: 0.8rem;
+.playlist-add-btn {
+  padding: 2px 10px;
+  font-size: 1.1rem;
   background: #333;
-  border-radius: 6px;
-  text-align: center;
-  cursor: pointer;
-  color: #e0e0e0;
-  border: none;
-  transition: background 0.2s;
+  line-height: 1;
 }
 
-.playlist-add-btns button:hover,
-.playlist-file-label:hover {
+.playlist-add-btn:hover {
   background: #444;
 }
 
-.playlist-section .progress-wrap {
-  height: 20px;
-}
-
-.subtitle-section {
-  border-top: 1px solid #333;
-  padding-top: 16px;
-}
-
-.subtitle-controls {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-}
-
-.subtitle-file-label {
-  display: block;
-  padding: 8px;
-  font-size: 0.8rem;
-  background: #252525;
-  border-radius: 6px;
-  text-align: center;
-  cursor: pointer;
-  color: #aaa;
-  transition: background 0.2s;
-}
-
-.subtitle-file-label:hover {
-  background: #333;
-}
-
 .sub-toggle {
-  padding: 8px;
-  font-size: 0.85rem;
+  padding: 6px 8px;
+  font-size: 0.8rem;
   background: #333;
   border-radius: 6px;
   width: 100%;
@@ -484,14 +435,157 @@ button:disabled {
   background: #444;
 }
 
+/* === Chat === */
+.chat-section {
+  border-top: 1px solid #333;
+  padding-top: 16px;
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-height: 0;
+}
+
+.chat-messages {
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-height: 80px;
+  max-height: 300px;
+  padding: 4px;
+}
+
+.chat-msg {
+  font-size: 0.8rem;
+}
+
+.chat-nick {
+  font-weight: bold;
+  color: #646cff;
+}
+
+.chat-msg-mine .chat-nick {
+  color: #4ade80;
+}
+
+.chat-time {
+  font-size: 0.65rem;
+  color: #666;
+}
+
+.chat-text {
+  color: #ddd;
+  word-break: break-word;
+}
+
+.chat-input-wrap {
+  display: flex;
+  gap: 4px;
+}
+
+.chat-input-wrap input {
+  flex: 1;
+  padding: 8px 10px;
+  font-size: 0.8rem;
+}
+
+.chat-input-wrap button {
+  padding: 8px 12px;
+  font-size: 0.8rem;
+  background: #333;
+  white-space: nowrap;
+}
+
+.chat-input-wrap button:hover {
+  background: #444;
+}
+
+/* === Modal === */
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal {
+  background: #1a1a1a;
+  border: 1px solid #333;
+  border-radius: 12px;
+  width: 90%;
+  max-width: 460px;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid #333;
+}
+
+.modal-header h3 {
+  color: #fff;
+  font-size: 1rem;
+}
+
+.modal-close {
+  background: none;
+  border: none;
+  color: #888;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.modal-close:hover {
+  color: #fff;
+}
+
+.modal-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.modal-body .tabs {
+  margin-bottom: 4px;
+}
+
+.modal-tab-content {
+  display: none;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.modal-tab-content.active {
+  display: flex;
+}
+
+.modal-tab-content button {
+  width: 100%;
+}
+
 #status-area {
   margin-top: auto;
-  padding-top: 16px;
+  padding-top: 8px;
   border-top: 1px solid #333;
 }
 
 #status-msg {
-  font-size: 0.85rem;
+  font-size: 0.8rem;
   color: #888;
 }
 
