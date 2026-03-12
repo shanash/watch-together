@@ -60,6 +60,27 @@ let isFirstConnect = true;
 let player = null;
 let pendingSyncState = null;
 let ytApiLoaded = false;
+let pendingPlay = false;
+
+// When tab becomes visible, retry pending play
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && pendingPlay && player) {
+    pendingPlay = false;
+    safePlay();
+  }
+});
+
+function safePlay() {
+  if (!player) return;
+  try {
+    const result = player.play();
+    if (result && typeof result.catch === 'function') {
+      result.catch(() => { pendingPlay = true; });
+    }
+  } catch {
+    pendingPlay = true;
+  }
+}
 
 // Playlist state
 let playlist = [];
@@ -121,7 +142,7 @@ function initHTML5Player(url) {
   videoEl.controls = true;
 
   player = {
-    play() { videoEl.play(); },
+    play() { return videoEl.play(); },
     pause() { videoEl.pause(); },
     get currentTime() { return videoEl.currentTime; },
     set currentTime(t) { videoEl.currentTime = t; },
@@ -356,7 +377,7 @@ socket.on('sync-play', ({ currentTime }) => {
   if (!player) return;
   startSyncCooldown();
   player.currentTime = currentTime;
-  player.play();
+  safePlay();
   showSyncNotice();
 });
 
@@ -403,7 +424,7 @@ socket.on('playlist-switch', ({ url, index }) => {
   currentIndex = index;
   renderPlaylist();
   switchVideo(url, () => {
-    player.play();
+    safePlay();
   });
 });
 
@@ -584,7 +605,7 @@ function bindKeyboardControls() {
     if (e.code === 'Space') {
       e.preventDefault();
       if (player.paused) {
-        player.play();
+        safePlay();
       } else {
         player.pause();
       }
@@ -615,7 +636,7 @@ function applySyncState(state) {
   player.currentTime = targetTime;
 
   if (state.isPlaying) {
-    player.play();
+    safePlay();
   } else {
     player.pause();
   }
