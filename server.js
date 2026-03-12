@@ -38,6 +38,24 @@ app.get('/api/version', (req, res) => {
   res.json({ version: BUILD_VERSION, buildTime: BUILD_TIME });
 });
 
+// --- YouTube URL Validation ---
+app.post('/api/validate-youtube', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ valid: false, error: 'URL이 필요합니다.' });
+
+  try {
+    const oembedUrl = `https://www.youtube.com/oembed?url=${encodeURIComponent(url)}&format=json`;
+    const resp = await fetch(oembedUrl);
+    if (!resp.ok) {
+      return res.json({ valid: false, error: '유효하지 않은 YouTube 영상입니다.' });
+    }
+    const data = await resp.json();
+    res.json({ valid: true, title: data.title });
+  } catch {
+    res.json({ valid: false, error: 'YouTube 영상을 확인할 수 없습니다.' });
+  }
+});
+
 // --- Upload: Presigned URL ---
 const ALLOWED_EXTS = new Set(['.mp4', '.webm', '.mkv']);
 const ALLOWED_SUB_EXTS = new Set(['.smi', '.srt', '.vtt']);

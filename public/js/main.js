@@ -33,6 +33,22 @@ function showError(msg) {
   setTimeout(() => { errorMsg.hidden = true; }, 4000);
 }
 
+function getYouTubeVideoId(url) {
+  const match = url.match(
+    /(?:youtube\.com\/(?:watch\?v=|embed\/|shorts\/|live\/)|youtu\.be\/)([^&?#\/]+)/
+  );
+  return match ? match[1] : null;
+}
+
+async function validateYouTubeUrl(url) {
+  const res = await fetch('/api/validate-youtube', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ url }),
+  });
+  return res.json();
+}
+
 // --- ffmpeg.wasm MKV → MP4 conversion ---
 function loadScript(src) {
   return new Promise((resolve, reject) => {
@@ -260,7 +276,7 @@ async function uploadSubtitleFile(file) {
 }
 
 // --- Create Room ---
-createForm.addEventListener('submit', (e) => {
+createForm.addEventListener('submit', async (e) => {
   e.preventDefault();
   const nickname = document.getElementById('create-nickname').value.trim();
   if (!nickname) return;
@@ -274,6 +290,25 @@ createForm.addEventListener('submit', (e) => {
       return;
     }
     videoUrl = uploadedUrl || '';
+  }
+
+  // Validate YouTube URL
+  if (videoUrl && getYouTubeVideoId(videoUrl)) {
+    createBtn.disabled = true;
+    createBtn.textContent = '확인 중...';
+    try {
+      const result = await validateYouTubeUrl(videoUrl);
+      if (!result.valid) {
+        showError(result.error);
+        return;
+      }
+    } catch {
+      showError('YouTube 영상을 확인할 수 없습니다.');
+      return;
+    } finally {
+      createBtn.disabled = false;
+      createBtn.textContent = '방 만들기';
+    }
   }
 
   // Store data and navigate directly (room creation happens in room.js)

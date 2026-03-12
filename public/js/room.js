@@ -494,12 +494,37 @@ copyCodeBtn.addEventListener('click', () => {
 });
 
 // --- Playlist Add (URL) ---
-playlistAddUrlBtn.addEventListener('click', () => {
+playlistAddUrlBtn.addEventListener('click', async () => {
   const url = playlistUrlInput.value.trim();
   if (!url) return;
   const ytId = getYouTubeVideoId(url);
-  const title = ytId ? 'YouTube 영상' : (url.split('/').pop().split('?')[0] || 'Video');
-  socket.emit('playlist-add', { url, title });
+
+  if (ytId) {
+    playlistAddUrlBtn.disabled = true;
+    playlistAddUrlBtn.textContent = '확인 중...';
+    try {
+      const res = await fetch('/api/validate-youtube', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url }),
+      });
+      const result = await res.json();
+      if (!result.valid) {
+        statusMsg.textContent = result.error;
+        return;
+      }
+      socket.emit('playlist-add', { url, title: result.title });
+    } catch {
+      statusMsg.textContent = 'YouTube 영상을 확인할 수 없습니다.';
+      return;
+    } finally {
+      playlistAddUrlBtn.disabled = false;
+      playlistAddUrlBtn.textContent = '추가';
+    }
+  } else {
+    const title = url.split('/').pop().split('?')[0] || 'Video';
+    socket.emit('playlist-add', { url, title });
+  }
   playlistUrlInput.value = '';
 });
 
