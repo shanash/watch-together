@@ -23,7 +23,12 @@ const __dirname = dirname(__filename);
 
 const app = express();
 const server = createServer(app);
-const io = new Server(server);
+const io = new Server(server, {
+  pingInterval: 25000,
+  pingTimeout: 60000,
+  transports: ['websocket', 'polling'],
+  allowUpgrades: true,
+});
 
 // Middleware
 app.use(express.json());
@@ -184,8 +189,53 @@ async function fetchVideoTitle(url) {
   }
 }
 
+io.engine.on('connection_error', (err) => {
+  log.error('engine', 'Connection error', {
+    code: err.code,
+    message: err.message,
+    context: err.context,
+  });
+});
+
 io.on('connection', (socket) => {
-  log.info('socket', 'Client connected', { socketId: socket.id });
+  const transport = socket.conn.transport.name;
+  const addr = socket.handshake.address;
+  const ua = socket.handshake.headers['user-agent'] || 'unknown';
+  socket.data.connectedAt = Date.now();
+  log.info('socket', 'Client connected', {
+    socketId: socket.id,
+    transport,
+    address: addr,
+    userAgent: ua,
+  });
+
+  // Log transport upgrades (polling -> websocket)
+  socket.conn.on('upgrade', (transport) => {
+    log.info('socket', 'Transport upgraded', {
+      socketId: socket.id,
+      nickname: socket.data.nickname,
+      transport: transport.name,
+    });
+  });
+
+  socket.conn.on('close', (reason, description) => {
+    log.warn('socket', 'Transport closed', {
+      socketId: socket.id,
+      nickname: socket.data.nickname,
+      roomId: socket.data.roomId,
+      reason,
+      description: description?.message || description,
+    });
+  });
+
+  socket.on('error', (err) => {
+    log.error('socket', 'Socket error', {
+      socketId: socket.id,
+      nickname: socket.data.nickname,
+      roomId: socket.data.roomId,
+      error: err.message,
+    });
+  });
 
   // --- Create Room ---
   socket.on('create-room', async ({ nickname, videoUrl, subtitleUrl, requestedRoomId }) => {
@@ -363,6 +413,14 @@ io.on('connection', (socket) => {
     const roomId = socket.data.roomId;
     const nickname = socket.data.nickname;
     if (!roomId) return;
+    if (latency > 1000) {
+      log.warn('network', 'High latency detected', {
+        socketId: socket.id,
+        nickname,
+        roomId,
+        latency,
+      });
+    }
     socket.to(roomId).emit('user-network', { nickname, latency });
   });
 
@@ -403,6 +461,10 @@ io.on('connection', (socket) => {
       nickname: socket.data.nickname,
       roomId: socket.data.roomId,
       reason,
+      transport: socket.conn?.transport?.name || 'unknown',
+      connectedDuration: socket.data.connectedAt
+        ? `${Math.round((Date.now() - socket.data.connectedAt) / 1000)}s`
+        : 'unknown',
     });
 
     const roomId = socket.data.roomId;

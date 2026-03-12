@@ -1,4 +1,13 @@
-const socket = io();
+const socket = io({
+  transports: ['websocket', 'polling'],
+  reconnection: true,
+  reconnectionAttempts: Infinity,
+  reconnectionDelay: 1000,
+  reconnectionDelayMax: 10000,
+  timeout: 30000,
+});
+
+let reconnectAttempts = 0;
 
 // --- Client Error Reporting ---
 window.addEventListener('error', (e) => {
@@ -18,15 +27,35 @@ window.addEventListener('unhandledrejection', (e) => {
 });
 
 socket.on('connect_error', (err) => {
-  console.error('Socket connect error:', err.message);
+  reconnectAttempts++;
+  console.error(`[WatchTogether] Connect error (attempt ${reconnectAttempts}):`, err.message);
+  statusMsg.textContent = `연결 실패 (${reconnectAttempts}번째 시도)... 재연결 중`;
+});
+
+socket.io.on('reconnect', (attempt) => {
+  console.log(`[WatchTogether] Reconnected after ${attempt} attempts`);
+  reconnectAttempts = 0;
+  statusMsg.textContent = '재연결되었습니다.';
+});
+
+socket.io.on('reconnect_error', (err) => {
+  console.error('[WatchTogether] Reconnect error:', err.message);
+});
+
+socket.io.on('reconnect_failed', () => {
+  console.error('[WatchTogether] Reconnect failed permanently');
+  statusMsg.textContent = '서버에 연결할 수 없습니다. 페이지를 새로고침하세요.';
 });
 
 socket.on('disconnect', (reason) => {
-  console.warn('Socket disconnected:', reason);
+  console.warn(`[WatchTogether] Disconnected: ${reason}`);
   if (reason === 'io server disconnect') {
     statusMsg.textContent = '서버에 의해 연결이 끊겼습니다.';
+    socket.connect(); // manually reconnect
   } else if (reason === 'transport close' || reason === 'transport error') {
     statusMsg.textContent = '네트워크 연결이 끊겼습니다. 재연결 시도 중...';
+  } else if (reason === 'ping timeout') {
+    statusMsg.textContent = '서버 응답 시간 초과. 재연결 시도 중...';
   }
 });
 
