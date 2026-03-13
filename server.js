@@ -249,12 +249,11 @@ io.on('connection', (socket) => {
     const playlist = [];
     if (videoUrl) {
       const title = await fetchVideoTitle(videoUrl);
-      playlist.push({ url: videoUrl, title, addedBy: nickname });
+      playlist.push({ url: videoUrl, title, addedBy: nickname, subtitleUrl: subtitleUrl || null });
     }
     const room = {
       playlist,
       currentIndex: 0,
-      subtitleUrl: subtitleUrl || null,
       users: [{ id: socket.id, nickname }],
       playbackState: {
         currentTime: 0,
@@ -302,7 +301,6 @@ io.on('connection', (socket) => {
       room: {
         playlist: room.playlist,
         currentIndex: room.currentIndex,
-        subtitleUrl: room.subtitleUrl,
         users: room.users.map((u) => u.nickname),
       },
       playbackState: room.playbackState,
@@ -374,18 +372,18 @@ io.on('connection', (socket) => {
     });
   });
 
-  // --- Subtitle Update ---
-  socket.on('subtitle-update', ({ subtitleUrl }) => {
+  // --- Playlist Subtitle ---
+  socket.on('playlist-subtitle', ({ index, subtitleUrl }) => {
     const roomId = socket.data.roomId;
     const room = rooms.get(roomId);
-    if (!room) return;
-    room.subtitleUrl = subtitleUrl;
-    socket.to(roomId).emit('subtitle-updated', { subtitleUrl });
-    log.info('room', 'Subtitle updated', { roomId, nickname: socket.data.nickname, subtitleUrl });
+    if (!room || index < 0 || index >= room.playlist.length) return;
+    room.playlist[index].subtitleUrl = subtitleUrl;
+    io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
+    log.info('room', 'Playlist subtitle updated', { roomId, nickname: socket.data.nickname, index, subtitleUrl });
   });
 
   // --- Playlist Events ---
-  socket.on('playlist-add', async ({ url }) => {
+  socket.on('playlist-add', async ({ url, subtitleUrl }) => {
     const roomId = socket.data.roomId;
     const room = rooms.get(roomId);
     if (!room) return;
@@ -394,7 +392,7 @@ io.on('connection', (socket) => {
       return;
     }
     const title = await fetchVideoTitle(url);
-    room.playlist.push({ url, title, addedBy: socket.data.nickname });
+    room.playlist.push({ url, title, addedBy: socket.data.nickname, subtitleUrl: subtitleUrl || null });
     io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
   });
 

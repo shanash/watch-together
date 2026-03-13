@@ -194,6 +194,10 @@ function destroyCurrentPlayer() {
   videoEl.removeAttribute('src');
   videoEl.load();
 
+  // Clean up subtitles
+  videoEl.querySelectorAll('track').forEach(t => t.remove());
+  subToggle.hidden = true;
+
   // Clean up YouTube player
   if (player && player.isYouTube && player._yt) {
     player._yt.destroy();
@@ -419,7 +423,7 @@ socket.on('room-created', ({ roomId: id, playlist: pl, currentIndex: idx }) => {
   });
 
   // Load subtitle if available (HTML5 only)
-  const subUrl = sessionStorage.getItem('wt-subtitleUrl');
+  const subUrl = playlist[currentIndex].subtitleUrl;
   if (subUrl && !getYouTubeVideoId(videoUrl)) loadSubtitle(subUrl);
 });
 
@@ -475,7 +479,8 @@ socket.on('room-joined', ({ room, playbackState }) => {
   });
 
   // Load subtitle if available (HTML5 only)
-  if (room.subtitleUrl && !isYT) loadSubtitle(room.subtitleUrl);
+  const subUrl2 = playlist[currentIndex]?.subtitleUrl;
+  if (subUrl2 && !isYT) loadSubtitle(subUrl2);
 });
 
 // --- Sync Events from Others ---
@@ -517,6 +522,7 @@ socket.on('sync-state', (state) => {
 // --- Playlist Events ---
 socket.on('playlist-updated', ({ playlist: pl, currentIndex: idx }) => {
   const wasEmpty = playlist.length === 0;
+  const prevSubUrl = playlist[idx]?.subtitleUrl;
   playlist = pl;
   currentIndex = idx;
   renderPlaylist();
@@ -529,7 +535,17 @@ socket.on('playlist-updated', ({ playlist: pl, currentIndex: idx }) => {
       bindSyncEvents();
       bindEndedEvent();
       bindKeyboardControls();
+      const item = playlist[currentIndex];
+      if (item?.subtitleUrl && !player.isYouTube) {
+        loadSubtitle(item.subtitleUrl);
+      }
     });
+  } else if (player && !player.isYouTube) {
+    // Reload subtitle if it changed for the current video
+    const newSubUrl = playlist[idx]?.subtitleUrl;
+    if (newSubUrl && newSubUrl !== prevSubUrl) {
+      loadSubtitle(newSubUrl);
+    }
   }
 });
 
@@ -539,6 +555,11 @@ socket.on('playlist-switch', ({ url, index }) => {
   addSystemMessage(`재생 전환: ${playlist[index]?.title || '다음 영상'}`);
   switchVideo(url, () => {
     safePlay();
+    // Load subtitle for the new video (HTML5 only)
+    const item = playlist[index];
+    if (item?.subtitleUrl && player && !player.isYouTube) {
+      loadSubtitle(item.subtitleUrl);
+    }
   });
 });
 
@@ -818,9 +839,8 @@ async function performFileUpload(videoFile, subFile) {
       xhr.send(videoFile);
     });
 
-    socket.emit('playlist-add', { url: publicUrl });
-
     // Upload subtitle if selected
+    let subPublicUrl = null;
     if (subFile) {
       const buffer = await subFile.arrayBuffer();
       let text = new TextDecoder('utf-8').decode(buffer);
@@ -833,16 +853,17 @@ async function performFileUpload(videoFile, subFile) {
         body: JSON.stringify({ filename: subFile.name }),
       });
       if (subRes.ok) {
-        const { presignedUrl: subPresign, publicUrl: subPublicUrl } = await subRes.json();
+        const { presignedUrl: subPresign, publicUrl: subPubUrl } = await subRes.json();
         await fetch(subPresign, {
           method: 'PUT',
           headers: { 'Content-Type': 'text/plain' },
           body: new Blob([text], { type: 'text/plain' }),
         });
-        socket.emit('subtitle-update', { subtitleUrl: subPublicUrl });
-        loadSubtitle(subPublicUrl);
+        subPublicUrl = subPubUrl;
       }
     }
+
+    socket.emit('playlist-add', { url: publicUrl, subtitleUrl: subPublicUrl });
 
     showModalStatus('추가 완료!', 'success');
     lastUploadVideoFile = null;
@@ -1180,9 +1201,3 @@ subToggle.addEventListener('click', () => {
   }
 });
 
-// --- Receive subtitle from others ---
-socket.on('subtitle-updated', ({ subtitleUrl }) => {
-  if (player && player.isYouTube) return;
-  statusMsg.textContent = '자막이 적용되었습니다.';
-  loadSubtitle(subtitleUrl);
-});
