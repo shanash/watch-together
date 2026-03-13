@@ -354,6 +354,14 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('sync-seek', { currentTime });
   });
 
+  socket.on('sync-rate', ({ rate }) => {
+    const roomId = socket.data.roomId;
+    const room = rooms.get(roomId);
+    if (!room) return;
+
+    socket.to(roomId).emit('sync-rate', { rate });
+  });
+
   // --- Chat ---
   socket.on('chat-message', ({ message }) => {
     const roomId = socket.data.roomId;

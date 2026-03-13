@@ -163,6 +163,7 @@ function destroyCurrentPlayer() {
   videoEl.removeEventListener('play', syncPlayHandler);
   videoEl.removeEventListener('pause', syncPauseHandler);
   videoEl.removeEventListener('seeked', syncSeekHandler);
+  videoEl.removeEventListener('ratechange', syncRateHandler);
   videoEl.removeEventListener('ended', endedHandler);
   videoEl.pause();
   videoEl.removeAttribute('src');
@@ -193,10 +194,13 @@ function initHTML5Player(url) {
     set currentTime(t) { videoEl.currentTime = t; },
     get paused() { return videoEl.paused; },
     get duration() { return videoEl.duration || Infinity; },
+    get playbackRate() { return videoEl.playbackRate; },
+    set playbackRate(r) { videoEl.playbackRate = r; },
     onPlay(cb) { videoEl.addEventListener('play', cb); },
     onPause(cb) { videoEl.addEventListener('pause', cb); },
     onSeeked(cb) { videoEl.addEventListener('seeked', cb); },
     onEnded(cb) { videoEl.addEventListener('ended', cb); },
+    onRateChange(cb) { videoEl.addEventListener('ratechange', cb); },
     isYouTube: false,
   };
 }
@@ -206,7 +210,7 @@ function initYouTubePlayer(videoId, onReady) {
   videoEl.hidden = true;
   ytPlayerWrap.hidden = false;
 
-  const callbacks = { play: [], pause: [], ended: [] };
+  const callbacks = { play: [], pause: [], ended: [], ratechange: [] };
   let ytTimeout = null;
 
   player = {
@@ -218,10 +222,13 @@ function initYouTubePlayer(videoId, onReady) {
     set currentTime(t) { if (this._ready) this._yt.seekTo(t, true); },
     get paused() { return this._ready ? this._yt.getPlayerState() !== 1 : true; },
     get duration() { return this._ready ? this._yt.getDuration() : Infinity; },
+    get playbackRate() { return this._ready ? this._yt.getPlaybackRate() : 1; },
+    set playbackRate(r) { if (this._ready) this._yt.setPlaybackRate(r); },
     onPlay(cb) { callbacks.play.push(cb); },
     onPause(cb) { callbacks.pause.push(cb); },
     onSeeked(cb) { /* YouTube state changes cover seeking */ },
     onEnded(cb) { callbacks.ended.push(cb); },
+    onRateChange(cb) { callbacks.ratechange.push(cb); },
     isYouTube: true,
   };
 
@@ -247,6 +254,9 @@ function initYouTubePlayer(videoId, onReady) {
           } else if (e.data === YT.PlayerState.ENDED) {
             callbacks.ended.forEach((cb) => cb());
           }
+        },
+        onPlaybackRateChange: () => {
+          callbacks.ratechange.forEach((cb) => cb());
         },
         onError: (e) => {
           const messages = {
@@ -297,6 +307,10 @@ function syncPauseHandler() {
 function syncSeekHandler() {
   if (syncCooldown) { extendSyncCooldown(); return; }
   socket.emit('sync-seek', { currentTime: player.currentTime });
+}
+function syncRateHandler() {
+  if (syncCooldown) { extendSyncCooldown(); return; }
+  socket.emit('sync-rate', { rate: player.playbackRate });
 }
 function endedHandler() {
   socket.emit('video-ended', { index: currentIndex });
@@ -443,6 +457,13 @@ socket.on('sync-seek', ({ currentTime }) => {
   if (!player) return;
   startSyncCooldown();
   player.currentTime = currentTime;
+  showSyncNotice();
+});
+
+socket.on('sync-rate', ({ rate }) => {
+  if (!player) return;
+  startSyncCooldown();
+  player.playbackRate = rate;
   showSyncNotice();
 });
 
@@ -761,6 +782,7 @@ function bindSyncEvents() {
   player.onPlay(syncPlayHandler);
   player.onPause(syncPauseHandler);
   player.onSeeked(syncSeekHandler);
+  player.onRateChange(syncRateHandler);
 }
 
 function bindEndedEvent() {
