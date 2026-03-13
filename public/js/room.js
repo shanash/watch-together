@@ -590,15 +590,61 @@ copyCodeBtn.addEventListener('click', () => {
 
 // === Playlist Add Modal ===
 let modalActiveTab = 'modal-url';
+let modalTriggerEl = null;
 
-playlistAddBtn.addEventListener('click', () => {
+function openModal() {
+  modalTriggerEl = document.activeElement;
   playlistModal.hidden = false;
-  modalUrlInput.focus();
+  const firstFocusable = playlistModal.querySelector('button, input:not([hidden])');
+  if (firstFocusable) firstFocusable.focus();
+}
+
+function closeModal() {
+  playlistModal.hidden = true;
+  if (modalTriggerEl) {
+    modalTriggerEl.focus();
+    modalTriggerEl = null;
+  }
+}
+
+playlistAddBtn.addEventListener('click', openModal);
+modalClose.addEventListener('click', closeModal);
+playlistModal.addEventListener('click', (e) => {
+  if (e.target === playlistModal) closeModal();
 });
 
-modalClose.addEventListener('click', () => { playlistModal.hidden = true; });
-playlistModal.addEventListener('click', (e) => {
-  if (e.target === playlistModal) playlistModal.hidden = true;
+// ESC to close modal
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && !playlistModal.hidden) {
+    e.preventDefault();
+    closeModal();
+  }
+});
+
+// Tab trapping within modal
+playlistModal.addEventListener('keydown', (e) => {
+  if (e.key !== 'Tab') return;
+  const focusableEls = [...playlistModal.querySelectorAll(
+    'button:not([disabled]), input:not([hidden])'
+  )].filter(el => {
+    const tabContent = el.closest('.modal-tab-content');
+    if (tabContent && !tabContent.classList.contains('active')) return false;
+    return el.offsetParent !== null;
+  });
+  if (focusableEls.length === 0) return;
+  const firstEl = focusableEls[0];
+  const lastEl = focusableEls[focusableEls.length - 1];
+  if (e.shiftKey) {
+    if (document.activeElement === firstEl) {
+      e.preventDefault();
+      lastEl.focus();
+    }
+  } else {
+    if (document.activeElement === lastEl) {
+      e.preventDefault();
+      firstEl.focus();
+    }
+  }
 });
 
 // Modal tabs
