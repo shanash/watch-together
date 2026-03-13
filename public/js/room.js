@@ -389,7 +389,7 @@ socket.on('room-created', ({ roomId: id, playlist: pl, currentIndex: idx }) => {
   sessionStorage.setItem('wt-roomId', roomId);
 
   roomIdEl.textContent = roomId;
-  history.replaceState(null, '', `/join/${roomId}`);
+  history.replaceState(null, '', `/${roomId}`);
   playlist = pl;
   currentIndex = idx;
   renderPlaylist();
@@ -428,7 +428,7 @@ socket.on('room-joined', ({ room, playbackState }) => {
   const prevIndex = currentIndex;
 
   roomIdEl.textContent = roomId;
-  history.replaceState(null, '', `/join/${roomId}`);
+  history.replaceState(null, '', `/${roomId}`);
   playlist = room.playlist;
   currentIndex = room.currentIndex;
   renderPlaylist();
@@ -623,7 +623,7 @@ socket.on('user-buffering', ({ nickname: name, buffering }) => {
 
 // --- Copy Room Code ---
 copyCodeBtn.addEventListener('click', () => {
-  const joinUrl = `${window.location.origin}/join/${roomId}`;
+  const joinUrl = `${window.location.origin}/${roomId}`;
   navigator.clipboard.writeText(joinUrl).then(() => {
     copyCodeBtn.textContent = '링크 복사됨!';
     setTimeout(() => { copyCodeBtn.textContent = '복사'; }, 1500);

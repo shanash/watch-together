@@ -23,7 +23,8 @@
   </div>
 
   <script>
-    const roomId = window.location.pathname.split('/join/')[1];
+    const path = window.location.pathname;
+    const roomId = path.startsWith('/join/') ? path.split('/join/')[1] : path.slice(1);
     document.getElementById('room-code').textContent = roomId;
 
     document.getElementById('join-form').addEventListener('submit', (e) => {

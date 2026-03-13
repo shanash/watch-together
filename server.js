@@ -39,9 +39,9 @@ app.use(express.static(join(__dirname, 'public')));
 app.use('/ffmpeg', express.static(join(__dirname, 'node_modules/@ffmpeg/ffmpeg/dist/umd')));
 app.use('/ffmpeg-util', express.static(join(__dirname, 'node_modules/@ffmpeg/util/dist/umd')));
 
-// --- Direct join URL ---
+// --- Direct join URL (legacy redirect) ---
 app.get('/join/:roomId', (req, res) => {
-  res.sendFile(join(__dirname, 'public', 'join.html'));
+  res.redirect(`/${req.params.roomId}`);
 });
 
 // --- Version API ---
@@ -559,6 +559,11 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('user-left', { nickname });
     log.info('room', 'User left', { roomId, nickname, remainingUsers: room.users.length });
   });
+});
+
+// --- Short join URL (must be last route) ---
+app.get('/:roomId([A-Za-z0-9_-]{6,})', (req, res) => {
+  res.sendFile(join(__dirname, 'public', 'join.html'));
 });
 
 const PORT = process.env.PORT || 3000;
