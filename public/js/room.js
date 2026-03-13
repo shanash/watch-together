@@ -70,6 +70,8 @@ const statusMsg = document.getElementById('status-msg');
 const syncNotice = document.getElementById('sync-notice');
 const subToggle = document.getElementById('sub-toggle');
 const playlistEl = document.getElementById('playlist');
+const fullscreenBtn = document.getElementById('fullscreen-btn');
+const videoArea = document.querySelector('.video-area');
 
 // Modal elements
 const playlistAddBtn = document.getElementById('playlist-add-btn');
@@ -589,6 +591,20 @@ copyCodeBtn.addEventListener('click', () => {
   });
 });
 
+// === Fullscreen ===
+fullscreenBtn.addEventListener('click', () => {
+  if (document.fullscreenElement) {
+    document.exitFullscreen();
+  } else {
+    videoArea.requestFullscreen().catch(() => {});
+  }
+});
+
+document.addEventListener('fullscreenchange', () => {
+  fullscreenBtn.textContent = document.fullscreenElement ? '⛶' : '⛶';
+  fullscreenBtn.title = document.fullscreenElement ? '전체화면 종료' : '전체화면';
+});
+
 // === Playlist Add Modal ===
 let modalActiveTab = 'modal-url';
 let modalTriggerEl = null;
@@ -914,6 +930,9 @@ function bindKeyboardControls() {
     } else if (e.code === 'ArrowRight') {
       e.preventDefault();
       player.currentTime = Math.min(player.duration, player.currentTime + 5);
+    } else if (e.code === 'KeyF') {
+      e.preventDefault();
+      fullscreenBtn.click();
     }
   });
 }
