@@ -187,6 +187,9 @@ function destroyCurrentPlayer() {
   videoEl.removeEventListener('seeked', syncSeekHandler);
   videoEl.removeEventListener('ratechange', syncRateHandler);
   videoEl.removeEventListener('ended', endedHandler);
+  videoEl.removeEventListener('waiting', bufferingStartHandler);
+  videoEl.removeEventListener('playing', bufferingEndHandler);
+  videoEl.removeEventListener('canplay', bufferingEndHandler);
   videoEl.pause();
   videoEl.removeAttribute('src');
   videoEl.load();
@@ -223,6 +226,11 @@ function initHTML5Player(url) {
     onSeeked(cb) { videoEl.addEventListener('seeked', cb); },
     onEnded(cb) { videoEl.addEventListener('ended', cb); },
     onRateChange(cb) { videoEl.addEventListener('ratechange', cb); },
+    onBuffering(startCb, endCb) {
+      videoEl.addEventListener('waiting', startCb);
+      videoEl.addEventListener('playing', endCb);
+      videoEl.addEventListener('canplay', endCb);
+    },
     isYouTube: false,
   };
 }
@@ -232,7 +240,7 @@ function initYouTubePlayer(videoId, onReady) {
   videoEl.hidden = true;
   ytPlayerWrap.hidden = false;
 
-  const callbacks = { play: [], pause: [], ended: [], ratechange: [] };
+  const callbacks = { play: [], pause: [], ended: [], ratechange: [], bufferingStart: [], bufferingEnd: [] };
   let ytTimeout = null;
 
   player = {
@@ -251,6 +259,7 @@ function initYouTubePlayer(videoId, onReady) {
     onSeeked(cb) { /* YouTube state changes cover seeking */ },
     onEnded(cb) { callbacks.ended.push(cb); },
     onRateChange(cb) { callbacks.ratechange.push(cb); },
+    onBuffering(startCb, endCb) { callbacks.bufferingStart.push(startCb); callbacks.bufferingEnd.push(endCb); },
     isYouTube: true,
   };
 
@@ -271,10 +280,13 @@ function initYouTubePlayer(videoId, onReady) {
         onStateChange: (e) => {
           if (e.data === YT.PlayerState.PLAYING) {
             callbacks.play.forEach((cb) => cb());
+            callbacks.bufferingEnd.forEach((cb) => cb());
           } else if (e.data === YT.PlayerState.PAUSED) {
             callbacks.pause.forEach((cb) => cb());
           } else if (e.data === YT.PlayerState.ENDED) {
             callbacks.ended.forEach((cb) => cb());
+          } else if (e.data === YT.PlayerState.BUFFERING) {
+            callbacks.bufferingStart.forEach((cb) => cb());
           }
         },
         onPlaybackRateChange: () => {
@@ -336,6 +348,12 @@ function syncRateHandler() {
 }
 function endedHandler() {
   socket.emit('video-ended', { index: currentIndex });
+}
+function bufferingStartHandler() {
+  socket.volatile.emit('buffering-status', { buffering: true });
+}
+function bufferingEndHandler() {
+  socket.volatile.emit('buffering-status', { buffering: false });
 }
 
 function switchVideo(url, onReady) {
@@ -579,6 +597,25 @@ socket.on('user-network', ({ nickname: name, latency }) => {
   } else {
     icon.textContent = '\u{1F7E2}';
     icon.title = `지연: ${latency}ms`;
+  }
+});
+
+socket.on('user-buffering', ({ nickname: name, buffering }) => {
+  const li = [...userList.querySelectorAll('li')].find(
+    (el) => el.dataset.nickname === name
+  );
+  if (!li) return;
+  const bufIcon = li.querySelector('.buf-icon');
+  if (buffering) {
+    if (!bufIcon) {
+      const span = document.createElement('span');
+      span.className = 'buf-icon';
+      span.textContent = '⏳';
+      span.title = '버퍼링 중';
+      li.querySelector('.net-icon').before(span);
+    }
+  } else {
+    if (bufIcon) bufIcon.remove();
   }
 });
 
@@ -898,6 +935,7 @@ function bindSyncEvents() {
   player.onPause(syncPauseHandler);
   player.onSeeked(syncSeekHandler);
   player.onRateChange(syncRateHandler);
+  player.onBuffering(bufferingStartHandler, bufferingEndHandler);
 }
 
 function bindEndedEvent() {

@@ -483,6 +483,13 @@ io.on('connection', (socket) => {
     socket.to(roomId).emit('user-network', { nickname, latency });
   });
 
+  // --- Buffering Status ---
+  socket.on('buffering-status', ({ buffering }) => {
+    const roomId = socket.data.roomId;
+    if (!roomId) return;
+    socket.to(roomId).emit('user-buffering', { nickname: socket.data.nickname, buffering });
+  });
+
   // --- Request Sync (server responds directly) ---
   socket.on('request-sync', () => {
     const roomId = socket.data.roomId;
