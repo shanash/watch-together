@@ -513,6 +513,7 @@ socket.on('playlist-updated', ({ playlist: pl, currentIndex: idx }) => {
 socket.on('playlist-switch', ({ url, index }) => {
   currentIndex = index;
   renderPlaylist();
+  addSystemMessage(`재생 전환: ${playlist[index]?.title || '다음 영상'}`);
   switchVideo(url, () => {
     safePlay();
   });
@@ -520,17 +521,20 @@ socket.on('playlist-switch', ({ url, index }) => {
 
 socket.on('playlist-ended', () => {
   statusMsg.textContent = '재생목록이 끝났습니다.';
+  addSystemMessage('재생목록이 끝났습니다.');
 });
 
 // --- User Events ---
 socket.on('user-joined', ({ nickname: name }) => {
   addUser(name);
   statusMsg.textContent = `${name}님이 참가했습니다.`;
+  addSystemMessage(`${name}님이 참가했습니다.`);
 });
 
 socket.on('user-left', ({ nickname: name }) => {
   removeUser(name);
   statusMsg.textContent = `${name}님이 나갔습니다.`;
+  addSystemMessage(`${name}님이 나갔습니다.`);
 });
 
 // --- Error ---
@@ -778,6 +782,14 @@ socket.on('chat-message', ({ nickname: name, message, timestamp }) => {
 });
 
 // === Helper Functions ===
+
+function addSystemMessage(text) {
+  const div = document.createElement('div');
+  div.className = 'chat-system';
+  div.textContent = text;
+  chatMessages.appendChild(div);
+  chatMessages.scrollTop = chatMessages.scrollHeight;
+}
 
 function startSyncCooldown() {
   syncCooldown = true;
