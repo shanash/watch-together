@@ -950,12 +950,51 @@ function showSyncNotice() {
 
 // === Playlist UI ===
 
+let dragFromIndex = null;
+
 function renderPlaylist() {
   playlistEl.innerHTML = '';
   playlist.forEach((item, i) => {
     const li = document.createElement('li');
     li.title = `${item.title} (${item.addedBy})`;
+    li.dataset.index = i;
     if (i === currentIndex) li.classList.add('active');
+
+    // Drag handle
+    const handle = document.createElement('span');
+    handle.className = 'playlist-drag-handle';
+    handle.textContent = '⠿';
+    handle.title = '드래그하여 순서 변경';
+    li.appendChild(handle);
+
+    // Drag events
+    li.draggable = true;
+    li.addEventListener('dragstart', (e) => {
+      dragFromIndex = i;
+      li.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+    });
+    li.addEventListener('dragend', () => {
+      li.classList.remove('dragging');
+      dragFromIndex = null;
+      playlistEl.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+    });
+    li.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      playlistEl.querySelectorAll('.drag-over').forEach(el => el.classList.remove('drag-over'));
+      if (dragFromIndex !== null && dragFromIndex !== i) {
+        li.classList.add('drag-over');
+      }
+    });
+    li.addEventListener('drop', (e) => {
+      e.preventDefault();
+      li.classList.remove('drag-over');
+      if (dragFromIndex !== null && dragFromIndex !== i) {
+        socket.emit('playlist-reorder', { fromIndex: dragFromIndex, toIndex: i });
+        dragFromIndex = null;
+      }
+    });
 
     const titleSpan = document.createElement('span');
     titleSpan.className = 'playlist-title';

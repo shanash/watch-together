@@ -415,6 +415,29 @@ io.on('connection', (socket) => {
     io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
   });
 
+  socket.on('playlist-reorder', ({ fromIndex, toIndex }) => {
+    const roomId = socket.data.roomId;
+    const room = rooms.get(roomId);
+    if (!room) return;
+    if (fromIndex < 0 || fromIndex >= room.playlist.length) return;
+    if (toIndex < 0 || toIndex >= room.playlist.length) return;
+    if (fromIndex === toIndex) return;
+
+    const [item] = room.playlist.splice(fromIndex, 1);
+    room.playlist.splice(toIndex, 0, item);
+
+    // Adjust currentIndex to follow the currently playing item
+    if (room.currentIndex === fromIndex) {
+      room.currentIndex = toIndex;
+    } else if (fromIndex < room.currentIndex && toIndex >= room.currentIndex) {
+      room.currentIndex--;
+    } else if (fromIndex > room.currentIndex && toIndex <= room.currentIndex) {
+      room.currentIndex++;
+    }
+
+    io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
+  });
+
   socket.on('playlist-play', ({ index }) => {
     const roomId = socket.data.roomId;
     const room = rooms.get(roomId);

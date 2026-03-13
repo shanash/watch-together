@@ -382,6 +382,27 @@ button:disabled {
   background: #333;
 }
 
+.playlist-drag-handle {
+  cursor: grab;
+  color: #555;
+  margin-right: 6px;
+  font-size: 0.75rem;
+  user-select: none;
+  flex-shrink: 0;
+}
+
+.playlist-drag-handle:hover {
+  color: #999;
+}
+
+#playlist li.dragging {
+  opacity: 0.4;
+}
+
+#playlist li.drag-over {
+  border-top: 2px solid #646cff;
+}
+
 .playlist-title {
   flex: 1;
   white-space: nowrap;
