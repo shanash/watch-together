@@ -86,6 +86,7 @@ const modalUploadProgress = document.getElementById('modal-upload-progress');
 const modalProgressBar = document.getElementById('modal-progress-bar');
 const modalProgressText = document.getElementById('modal-progress-text');
 const modalStatus = document.getElementById('modal-status');
+const modalFileRetry = document.getElementById('modal-file-retry');
 
 // Chat elements
 const chatMessages = document.getElementById('chat-messages');
@@ -703,9 +704,17 @@ modalUrlInput.addEventListener('keydown', (e) => {
 });
 
 // Modal: file labels
+let lastUploadVideoFile = null;
+let lastUploadSubFile = null;
+
 modalVideoFile.addEventListener('change', () => {
   const file = modalVideoFile.files[0];
-  if (file) modalVideoLabel.querySelector('span').textContent = file.name;
+  if (file) {
+    modalVideoLabel.querySelector('span').textContent = file.name;
+    lastUploadVideoFile = null;
+    lastUploadSubFile = null;
+    modalFileRetry.hidden = true;
+  }
 });
 
 modalSubFile.addEventListener('change', () => {
@@ -714,13 +723,7 @@ modalSubFile.addEventListener('change', () => {
 });
 
 // Modal: file upload
-modalFileAddBtn.addEventListener('click', async () => {
-  const videoFile = modalVideoFile.files[0];
-  if (!videoFile) {
-    showModalStatus('영상 파일을 선택하세요.', 'fail');
-    return;
-  }
-
+async function performFileUpload(videoFile, subFile) {
   const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
   if (videoFile.size > MAX_FILE_SIZE) {
     showModalStatus('파일 크기는 2GB 이하여야 합니다.', 'fail');
@@ -728,6 +731,7 @@ modalFileAddBtn.addEventListener('click', async () => {
   }
 
   modalFileAddBtn.disabled = true;
+  modalFileRetry.hidden = true;
   modalUploadProgress.hidden = false;
   modalProgressBar.style.width = '0%';
   modalProgressText.textContent = '0%';
@@ -762,7 +766,6 @@ modalFileAddBtn.addEventListener('click', async () => {
     socket.emit('playlist-add', { url: publicUrl });
 
     // Upload subtitle if selected
-    const subFile = modalSubFile.files[0];
     if (subFile) {
       const buffer = await subFile.arrayBuffer();
       let text = new TextDecoder('utf-8').decode(buffer);
@@ -787,17 +790,36 @@ modalFileAddBtn.addEventListener('click', async () => {
     }
 
     showModalStatus('추가 완료!', 'success');
-    // Reset
+    lastUploadVideoFile = null;
+    lastUploadSubFile = null;
+    modalFileRetry.hidden = true;
     modalVideoFile.value = '';
     modalSubFile.value = '';
     modalVideoLabel.querySelector('span').textContent = '영상 파일 선택 (.mp4, .webm)';
     modalSubLabel.querySelector('span').textContent = '자막 파일 선택 (.smi, .srt, .vtt) - 선택사항';
   } catch (err) {
     showModalStatus(err.message, 'fail');
+    lastUploadVideoFile = videoFile;
+    lastUploadSubFile = subFile;
+    modalFileRetry.hidden = false;
   } finally {
     modalFileAddBtn.disabled = false;
     modalUploadProgress.hidden = true;
   }
+}
+
+modalFileAddBtn.addEventListener('click', async () => {
+  const videoFile = modalVideoFile.files[0];
+  if (!videoFile) {
+    showModalStatus('영상 파일을 선택하세요.', 'fail');
+    return;
+  }
+  await performFileUpload(videoFile, modalSubFile.files[0] || null);
+});
+
+modalFileRetry.addEventListener('click', async () => {
+  if (!lastUploadVideoFile) return;
+  await performFileUpload(lastUploadVideoFile, lastUploadSubFile);
 });
 
 // === Chat ===
