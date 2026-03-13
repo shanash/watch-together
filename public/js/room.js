@@ -389,6 +389,7 @@ socket.on('room-created', ({ roomId: id, playlist: pl, currentIndex: idx }) => {
   sessionStorage.setItem('wt-roomId', roomId);
 
   roomIdEl.textContent = roomId;
+  history.replaceState(null, '', `/join/${roomId}`);
   playlist = pl;
   currentIndex = idx;
   renderPlaylist();
@@ -427,6 +428,7 @@ socket.on('room-joined', ({ room, playbackState }) => {
   const prevIndex = currentIndex;
 
   roomIdEl.textContent = roomId;
+  history.replaceState(null, '', `/join/${roomId}`);
   playlist = room.playlist;
   currentIndex = room.currentIndex;
   renderPlaylist();
