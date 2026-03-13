@@ -92,6 +92,25 @@ const chatMessages = document.getElementById('chat-messages');
 const chatInput = document.getElementById('chat-input');
 const chatSendBtn = document.getElementById('chat-send');
 
+// Sidebar toggle (mobile)
+const sidebarToggle = document.getElementById('sidebar-toggle');
+const sidebarEl = document.querySelector('.sidebar');
+const sidebarBackdrop = document.getElementById('sidebar-backdrop');
+
+sidebarToggle.addEventListener('click', () => {
+  const isOpen = sidebarEl.classList.toggle('sidebar-open');
+  sidebarBackdrop.classList.toggle('active', isOpen);
+  sidebarToggle.setAttribute('aria-label', isOpen ? '메뉴 닫기' : '메뉴 열기');
+  sidebarToggle.textContent = isOpen ? '\u2715' : '\u2630';
+});
+
+sidebarBackdrop.addEventListener('click', () => {
+  sidebarEl.classList.remove('sidebar-open');
+  sidebarBackdrop.classList.remove('active');
+  sidebarToggle.setAttribute('aria-label', '메뉴 열기');
+  sidebarToggle.textContent = '\u2630';
+});
+
 let syncCooldown = false;
 let syncCooldownTimer = null;
 let syncEventsBound = false;
