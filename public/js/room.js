@@ -850,7 +850,7 @@ async function performFileUpload(videoFile, subFile) {
     modalFileRetry.hidden = true;
     modalVideoFile.value = '';
     modalSubFile.value = '';
-    modalVideoLabel.querySelector('span').textContent = '영상 파일 선택 (.mp4, .webm)';
+    modalVideoLabel.querySelector('span').textContent = '영상 파일 선택 (.mp4, .webm, .mkv)';
     modalSubLabel.querySelector('span').textContent = '자막 파일 선택 (.smi, .srt, .vtt) - 선택사항';
   } catch (err) {
     showModalStatus(err.message, 'fail');
