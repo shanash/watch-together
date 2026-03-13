@@ -884,7 +884,7 @@ chatSendBtn.addEventListener('click', () => {
 });
 
 chatInput.addEventListener('keydown', (e) => {
-  if (e.key === 'Enter') chatSendBtn.click();
+  if (e.key === 'Enter' && !e.isComposing) chatSendBtn.click();
 });
 
 socket.on('chat-message', ({ nickname: name, message, timestamp }) => {

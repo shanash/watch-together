@@ -340,7 +340,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 12px;
-  overflow-y: auto;
+  overflow: hidden;
 }
 
 .sidebar h3 {
@@ -506,6 +506,7 @@ button:disabled {
   flex-direction: column;
   gap: 8px;
   min-height: 0;
+  overflow: hidden;
 }
 
 .chat-messages {
@@ -514,8 +515,7 @@ button:disabled {
   display: flex;
   flex-direction: column;
   gap: 6px;
-  min-height: 80px;
-  max-height: 300px;
+  min-height: 0;
   padding: 4px;
 }
 
