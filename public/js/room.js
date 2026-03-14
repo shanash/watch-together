@@ -96,6 +96,10 @@ const modalProgressText = document.getElementById('modal-progress-text');
 const modalStatus = document.getElementById('modal-status');
 const modalFileRetry = document.getElementById('modal-file-retry');
 
+// Library elements
+const libraryList = document.getElementById('library-list');
+const libraryEmpty = document.getElementById('library-empty');
+
 // Chat elements
 const chatMessages = document.getElementById('chat-messages');
 const chatInput = document.getElementById('chat-input');
@@ -745,6 +749,7 @@ document.querySelectorAll('[data-modal-tab]').forEach((tab) => {
     modalActiveTab = tab.dataset.modalTab;
     document.querySelectorAll('.modal-tab-content').forEach((c) => c.classList.remove('active'));
     document.getElementById(modalActiveTab).classList.add('active');
+    if (modalActiveTab === 'modal-library') loadLibrary();
   });
 });
 
@@ -913,6 +918,55 @@ modalFileRetry.addEventListener('click', async () => {
   const title = modalFileTitle.value.trim();
   await performFileUpload(lastUploadVideoFile, lastUploadSubFile, title);
 });
+
+// Modal: library
+async function loadLibrary() {
+  libraryList.innerHTML = '<p class="library-loading">불러오는 중...</p>';
+  libraryEmpty.hidden = true;
+  try {
+    const res = await fetch(`/api/library?exclude=${encodeURIComponent(roomId)}`);
+    const items = await res.json();
+    // Filter out videos already in our playlist
+    const existingUrls = new Set(playlist.map(p => p.url));
+    const available = items.filter(item => !existingUrls.has(item.url));
+    libraryList.innerHTML = '';
+    if (available.length === 0) {
+      libraryEmpty.hidden = false;
+      return;
+    }
+    libraryEmpty.hidden = true;
+    available.forEach(item => {
+      const div = document.createElement('div');
+      div.className = 'library-item';
+      const info = document.createElement('div');
+      info.className = 'library-item-info';
+      const title = document.createElement('span');
+      title.className = 'library-item-title';
+      title.textContent = item.title;
+      info.appendChild(title);
+      if (item.subtitleUrl) {
+        const sub = document.createElement('span');
+        sub.className = 'library-item-sub';
+        sub.textContent = '자막 포함';
+        info.appendChild(sub);
+      }
+      div.appendChild(info);
+      const addBtn = document.createElement('button');
+      addBtn.className = 'library-item-add';
+      addBtn.textContent = '추가';
+      addBtn.addEventListener('click', () => {
+        socket.emit('playlist-add', { url: item.url, subtitleUrl: item.subtitleUrl, title: item.title });
+        div.remove();
+        showModalStatus('추가되었습니다!', 'success');
+        if (libraryList.children.length === 0) libraryEmpty.hidden = false;
+      });
+      div.appendChild(addBtn);
+      libraryList.appendChild(div);
+    });
+  } catch {
+    libraryList.innerHTML = '<p class="library-loading">불러오기 실패</p>';
+  }
+}
 
 // === Chat ===
 chatSendBtn.addEventListener('click', () => {

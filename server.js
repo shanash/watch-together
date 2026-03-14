@@ -149,6 +149,26 @@ app.post('/api/presign-subtitle', async (req, res) => {
   }
 });
 
+// --- Library: List videos from all rooms ---
+app.get('/api/library', (req, res) => {
+  const excludeRoom = req.query.exclude;
+  const seen = new Map(); // url -> item (deduplicate)
+  for (const [id, room] of rooms) {
+    if (id === excludeRoom) continue;
+    for (const item of room.playlist) {
+      if (!seen.has(item.url)) {
+        seen.set(item.url, {
+          url: item.url,
+          title: item.title,
+          subtitleUrl: item.subtitleUrl || null,
+          fromRoom: id,
+        });
+      }
+    }
+  }
+  res.json([...seen.values()]);
+});
+
 // --- Subtitle Proxy (avoid CORS issues when fetching from R2) ---
 app.get('/api/subtitle-proxy', async (req, res) => {
   try {

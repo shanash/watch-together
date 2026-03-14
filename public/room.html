@@ -81,6 +81,7 @@
         <div class="tabs">
           <button type="button" class="tab active" data-modal-tab="modal-url">URL 입력</button>
           <button type="button" class="tab" data-modal-tab="modal-file">파일 업로드</button>
+          <button type="button" class="tab" data-modal-tab="modal-library">라이브러리</button>
         </div>
 
         <!-- URL tab -->
@@ -106,6 +107,15 @@
           </div>
           <button id="modal-file-add">업로드 및 추가</button>
           <button id="modal-file-retry" class="retry-btn" hidden>재시도</button>
+        </div>
+
+        <!-- Library tab -->
+        <div id="modal-library" class="modal-tab-content">
+          <p class="library-desc">다른 방에 업로드된 영상을 가져올 수 있습니다.</p>
+          <div id="library-list" class="library-list">
+            <p class="library-loading">불러오는 중...</p>
+          </div>
+          <div id="library-empty" class="library-empty" hidden>다른 방에 영상이 없습니다.</div>
         </div>
 
         <div id="modal-status" class="upload-status" hidden></div>
