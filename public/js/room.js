@@ -163,6 +163,11 @@ function safePlay() {
 let playlist = [];
 let currentIndex = 0;
 
+function savePlaylistToStorage() {
+  sessionStorage.setItem('wt-playlist', JSON.stringify(playlist));
+  sessionStorage.setItem('wt-currentIndex', String(currentIndex));
+}
+
 // Redirect if no session data
 if (!nickname || !action) {
   window.location.href = '/';
@@ -407,6 +412,7 @@ socket.on('room-created', ({ roomId: id, playlist: pl, currentIndex: idx }) => {
   playlist = pl;
   currentIndex = idx;
   renderPlaylist();
+  savePlaylistToStorage();
 
   if (player) {
     // Room recreated after server restart - player already exists
@@ -446,6 +452,7 @@ socket.on('room-joined', ({ room, playbackState }) => {
   playlist = room.playlist;
   currentIndex = room.currentIndex;
   renderPlaylist();
+  savePlaylistToStorage();
   updateUserList(room.users);
 
   // Reconnection: player already initialized
@@ -536,6 +543,7 @@ socket.on('playlist-updated', ({ playlist: pl, currentIndex: idx }) => {
   playlist = pl;
   currentIndex = idx;
   renderPlaylist();
+  savePlaylistToStorage();
 
   // If player wasn't initialized yet and now we have videos, start the first one
   if (wasEmpty && playlist.length > 0 && !player) {
@@ -562,6 +570,7 @@ socket.on('playlist-updated', ({ playlist: pl, currentIndex: idx }) => {
 socket.on('playlist-switch', ({ url, index }) => {
   currentIndex = index;
   renderPlaylist();
+  savePlaylistToStorage();
   addSystemMessage(`재생 전환: ${playlist[index]?.title || '다음 영상'}`);
   switchVideo(url, () => {
     safePlay();
@@ -595,11 +604,16 @@ socket.on('user-left', ({ nickname: name }) => {
 socket.on('error-msg', ({ message, fatal }) => {
   statusMsg.textContent = message;
   if (fatal) {
-    // If host reconnects but room was deleted, recreate it
-    if (action === 'host' && !isFirstConnect) {
-      const videoUrl = sessionStorage.getItem('wt-videoUrl');
-      const subtitleUrl = sessionStorage.getItem('wt-subtitleUrl') || null;
-      socket.emit('create-room', { nickname, videoUrl, subtitleUrl, requestedRoomId: roomId });
+    // Try to restore room from saved playlist (any user, not just host)
+    const savedPlaylist = JSON.parse(sessionStorage.getItem('wt-playlist') || '[]');
+    const savedIndex = parseInt(sessionStorage.getItem('wt-currentIndex') || '0');
+    if (!isFirstConnect && roomId && savedPlaylist.length > 0) {
+      socket.emit('create-room', {
+        nickname,
+        requestedRoomId: roomId,
+        restorePlaylist: savedPlaylist,
+        restoreIndex: savedIndex,
+      });
       return;
     }
     setTimeout(() => { window.location.href = '/'; }, 2000);

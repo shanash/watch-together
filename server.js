@@ -368,7 +368,7 @@ io.on('connection', (socket) => {
   });
 
   // --- Create Room ---
-  socket.on('create-room', async ({ nickname, videoUrl, subtitleUrl, requestedRoomId }) => {
+  socket.on('create-room', async ({ nickname, videoUrl, subtitleUrl, requestedRoomId, restorePlaylist, restoreIndex }) => {
     // If the requested room already exists (e.g. persisted after restart), rejoin it
     if (requestedRoomId && rooms.has(requestedRoomId)) {
       const room = rooms.get(requestedRoomId);
@@ -393,14 +393,27 @@ io.on('connection', (socket) => {
     }
 
     const roomId = requestedRoomId || generateRoomId();
-    const playlist = [];
-    if (videoUrl) {
+    let playlist = [];
+    let startIndex = 0;
+    if (restorePlaylist && Array.isArray(restorePlaylist) && restorePlaylist.length > 0) {
+      // Restore playlist from client (e.g. after server restart on ephemeral filesystem)
+      playlist = restorePlaylist
+        .filter(item => item && typeof item.url === 'string' && typeof item.title === 'string')
+        .map(item => ({
+          url: item.url,
+          title: item.title,
+          addedBy: item.addedBy || nickname,
+          subtitleUrl: item.subtitleUrl || null,
+        }));
+      startIndex = Math.min(Math.max(restoreIndex || 0, 0), Math.max(playlist.length - 1, 0));
+      log.info('room', 'Room restored from client playlist', { roomId, nickname, items: playlist.length });
+    } else if (videoUrl) {
       const title = await fetchVideoTitle(videoUrl);
       playlist.push({ url: videoUrl, title, addedBy: nickname, subtitleUrl: subtitleUrl || null });
     }
     const room = {
       playlist,
-      currentIndex: 0,
+      currentIndex: startIndex,
       users: [{ id: socket.id, nickname }],
       playbackState: {
         currentTime: 0,
