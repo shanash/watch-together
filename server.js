@@ -9,7 +9,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join, extname } from 'path';
 import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { execSync } from 'child_process';
-import { generatePresignedUrl } from './r2.js';
+import { generatePresignedUrl, listFiles, deleteFile, PUBLIC_URL } from './r2.js';
 import log from './logger.js';
 
 // Build version from git
@@ -699,6 +699,103 @@ io.on('connection', (socket) => {
     log.info('room', 'User left', { roomId, nickname, remainingUsers: room.users.length });
   });
 });
+
+// --- Admin Dashboard ---
+const ADMIN_SECRET = process.env.ADMIN_SECRET;
+const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD;
+
+if (ADMIN_SECRET && ADMIN_PASSWORD) {
+  // Serve admin page at secret URL
+  app.get(`/admin/${ADMIN_SECRET}`, (req, res) => {
+    res.sendFile(join(__dirname, 'public', 'admin.html'));
+  });
+
+  // Auth middleware for admin API
+  function adminAuth(req, res, next) {
+    const auth = req.headers.authorization;
+    if (!auth || auth !== `Bearer ${ADMIN_PASSWORD}`) {
+      return res.status(401).json({ error: '인증 실패' });
+    }
+    next();
+  }
+
+  // Verify password
+  app.post('/api/admin/auth', express.json(), (req, res) => {
+    if (req.body.password === ADMIN_PASSWORD) {
+      res.json({ ok: true });
+    } else {
+      res.status(401).json({ error: '비밀번호가 틀렸습니다.' });
+    }
+  });
+
+  // List rooms
+  app.get('/api/admin/rooms', adminAuth, (req, res) => {
+    const list = [];
+    for (const [id, room] of rooms) {
+      list.push({
+        roomId: id,
+        users: room.users.map((u) => u.nickname),
+        userCount: room.users.length,
+        playlistCount: room.playlist.length,
+        currentIndex: room.currentIndex,
+        emptyAt: room.emptyAt,
+        playbackState: room.playbackState,
+      });
+    }
+    res.json(list);
+  });
+
+  // Delete room
+  app.delete('/api/admin/rooms/:roomId', adminAuth, (req, res) => {
+    const { roomId } = req.params;
+    const room = rooms.get(roomId);
+    if (!room) return res.status(404).json({ error: '방을 찾을 수 없습니다.' });
+
+    // Notify connected users
+    io.in(roomId).emit('error-msg', { message: '관리자에 의해 방이 삭제되었습니다.', fatal: true });
+    // Disconnect all sockets in room
+    io.in(roomId).socketsLeave(roomId);
+    if (room.deleteTimeout) clearTimeout(room.deleteTimeout);
+    rooms.delete(roomId);
+    scheduleSave();
+    log.info('admin', 'Room deleted by admin', { roomId });
+    res.json({ ok: true });
+  });
+
+  // List R2 files
+  app.get('/api/admin/files', adminAuth, async (req, res) => {
+    try {
+      const result = await listFiles(req.query.token || undefined);
+      // Add public URL to each file
+      result.files = result.files.map((f) => ({
+        ...f,
+        publicUrl: PUBLIC_URL ? `${PUBLIC_URL}/${f.key}` : null,
+      }));
+      res.json(result);
+    } catch (err) {
+      log.error('admin', 'Failed to list files', { error: err.message });
+      res.status(500).json({ error: '파일 목록을 가져올 수 없습니다.' });
+    }
+  });
+
+  // Delete R2 file
+  app.delete('/api/admin/files/*', adminAuth, async (req, res) => {
+    const key = req.params[0];
+    if (!key) return res.status(400).json({ error: '파일 키가 필요합니다.' });
+    try {
+      await deleteFile(key);
+      log.info('admin', 'File deleted by admin', { key });
+      res.json({ ok: true });
+    } catch (err) {
+      log.error('admin', 'Failed to delete file', { key, error: err.message });
+      res.status(500).json({ error: '파일 삭제에 실패했습니다.' });
+    }
+  });
+
+  log.info('server', 'Admin dashboard enabled');
+} else {
+  log.info('server', 'Admin dashboard disabled (ADMIN_SECRET or ADMIN_PASSWORD not set)');
+}
 
 // --- Short join URL (must be last route) ---
 app.get('/:roomId([A-Za-z0-9_-]{6,})', (req, res) => {

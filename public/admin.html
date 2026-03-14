@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Watch Together</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f0f; color: #e0e0e0; min-height: 100vh; }
+
+    .login-wrap { max-width: 400px; margin: 120px auto; padding: 0 20px; text-align: center; }
+    .login-wrap h1 { font-size: 1.8rem; margin-bottom: 24px; color: #fff; }
+    .login-wrap input { width: 100%; padding: 12px 16px; border: 1px solid #333; border-radius: 8px; background: #1a1a1a; color: #e0e0e0; font-size: 1rem; margin-bottom: 12px; }
+    .login-wrap input:focus { outline: none; border-color: #4a9eff; }
+    .login-wrap button { width: 100%; padding: 12px; border: none; border-radius: 8px; background: #4a9eff; color: #fff; font-size: 1rem; cursor: pointer; }
+    .login-wrap button:hover { background: #3a8eef; }
+    .login-error { color: #ff6b6b; margin-top: 8px; font-size: 0.9rem; }
+
+    .dashboard { max-width: 1000px; margin: 0 auto; padding: 24px 20px; display: none; }
+    .dashboard h1 { font-size: 1.5rem; color: #fff; margin-bottom: 20px; }
+
+    .tabs { display: flex; gap: 4px; margin-bottom: 20px; }
+    .tab-btn { padding: 10px 20px; border: 1px solid #333; border-radius: 8px 8px 0 0; background: #1a1a1a; color: #888; cursor: pointer; font-size: 0.95rem; border-bottom: none; }
+    .tab-btn.active { background: #252525; color: #fff; border-color: #444; }
+
+    .tab-panel { display: none; background: #1a1a1a; border: 1px solid #333; border-radius: 0 8px 8px 8px; padding: 20px; }
+    .tab-panel.active { display: block; }
+
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .toolbar .info { color: #888; font-size: 0.9rem; }
+    .refresh-btn { padding: 6px 14px; border: 1px solid #444; border-radius: 6px; background: transparent; color: #e0e0e0; cursor: pointer; font-size: 0.85rem; }
+    .refresh-btn:hover { background: #333; }
+
+    table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+    th { text-align: left; padding: 10px 12px; border-bottom: 1px solid #333; color: #888; font-weight: 500; }
+    td { padding: 10px 12px; border-bottom: 1px solid #222; }
+    tr:hover { background: #222; }
+
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; }
+    .badge-active { background: #1a3a2a; color: #4ade80; }
+    .badge-empty { background: #3a2a1a; color: #fbbf24; }
+
+    .del-btn { padding: 4px 10px; border: 1px solid #555; border-radius: 4px; background: transparent; color: #ff6b6b; cursor: pointer; font-size: 0.8rem; }
+    .del-btn:hover { background: #3a1a1a; }
+
+    .load-more { display: block; margin: 16px auto 0; padding: 8px 20px; border: 1px solid #444; border-radius: 6px; background: transparent; color: #e0e0e0; cursor: pointer; }
+    .load-more:hover { background: #333; }
+
+    .empty-msg { color: #666; text-align: center; padding: 40px; }
+    .file-size { color: #888; }
+  </style>
+</head>
+<body>
+
+<!-- Login -->
+<div class="login-wrap" id="login-section">
+  <h1>Admin</h1>
+  <form id="login-form">
+    <input type="password" id="password-input" placeholder="비밀번호" required autocomplete="current-password">
+    <button type="submit">로그인</button>
+  </form>
+  <p class="login-error" id="login-error"></p>
+</div>
+
+<!-- Dashboard -->
+<div class="dashboard" id="dashboard">
+  <h1>Watch Together Admin</h1>
+
+  <div class="tabs">
+    <button class="tab-btn active" data-tab="rooms">방 관리</button>
+    <button class="tab-btn" data-tab="files">파일 관리 (R2)</button>
+  </div>
+
+  <!-- Rooms Tab -->
+  <div class="tab-panel active" id="tab-rooms">
+    <div class="toolbar">
+      <span class="info" id="rooms-info">로딩 중...</span>
+      <button class="refresh-btn" onclick="loadRooms()">새로고침</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>방 ID</th><th>사용자</th><th>재생목록</th><th>상태</th><th></th></tr>
+      </thead>
+      <tbody id="rooms-body"></tbody>
+    </table>
+    <p class="empty-msg" id="rooms-empty" style="display:none">활성 방이 없습니다.</p>
+  </div>
+
+  <!-- Files Tab -->
+  <div class="tab-panel" id="tab-files">
+    <div class="toolbar">
+      <span class="info" id="files-info">로딩 중...</span>
+      <button class="refresh-btn" onclick="loadFiles(true)">새로고침</button>
+    </div>
+    <table>
+      <thead>
+        <tr><th>파일명</th><th>크기</th><th>업로드일</th><th></th></tr>
+      </thead>
+      <tbody id="files-body"></tbody>
+    </table>
+    <p class="empty-msg" id="files-empty" style="display:none">업로드된 파일이 없습니다.</p>
+    <button class="load-more" id="files-load-more" style="display:none" onclick="loadFiles(false)">더 불러오기</button>
+  </div>
+</div>
+
+<script>
+let authToken = '';
+let filesNextToken = null;
+
+// --- Login ---
+document.getElementById('login-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const pw = document.getElementById('password-input').value;
+  try {
+    const res = await fetch('/api/admin/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password: pw }),
+    });
+    if (!res.ok) {
+      document.getElementById('login-error').textContent = '비밀번호가 틀렸습니다.';
+      return;
+    }
+    authToken = pw;
+    document.getElementById('login-section').style.display = 'none';
+    document.getElementById('dashboard').style.display = 'block';
+    loadRooms();
+    loadFiles(true);
+  } catch {
+    document.getElementById('login-error').textContent = '서버 연결 실패';
+  }
+});
+
+// --- Tabs ---
+document.querySelectorAll('.tab-btn').forEach((btn) => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach((b) => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach((p) => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById(`tab-${btn.dataset.tab}`).classList.add('active');
+  });
+});
+
+// --- API Helper ---
+function api(path, opts = {}) {
+  return fetch(path, {
+    ...opts,
+    headers: { Authorization: `Bearer ${authToken}`, ...opts.headers },
+  });
+}
+
+// --- Rooms ---
+async function loadRooms() {
+  const res = await api('/api/admin/rooms');
+  const rooms = await res.json();
+  const body = document.getElementById('rooms-body');
+  const info = document.getElementById('rooms-info');
+  const empty = document.getElementById('rooms-empty');
+
+  info.textContent = `총 ${rooms.length}개 방`;
+  body.innerHTML = '';
+
+  if (rooms.length === 0) {
+    empty.style.display = 'block';
+    return;
+  }
+  empty.style.display = 'none';
+
+  for (const room of rooms) {
+    const tr = document.createElement('tr');
+    const isActive = room.userCount > 0;
+    const statusBadge = isActive
+      ? `<span class="badge badge-active">${room.userCount}명 접속</span>`
+      : `<span class="badge badge-empty">비어있음</span>`;
+    const users = room.users.length > 0 ? room.users.join(', ') : '-';
+
+    tr.innerHTML = `
+      <td><strong>${room.roomId}</strong></td>
+      <td>${users}</td>
+      <td>${room.playlistCount}개</td>
+      <td>${statusBadge}</td>
+      <td><button class="del-btn" onclick="deleteRoom('${room.roomId}')">삭제</button></td>
+    `;
+    body.appendChild(tr);
+  }
+}
+
+async function deleteRoom(roomId) {
+  if (!confirm(`방 "${roomId}"를 삭제하시겠습니까? 접속 중인 사용자가 퇴장됩니다.`)) return;
+  await api(`/api/admin/rooms/${roomId}`, { method: 'DELETE' });
+  loadRooms();
+}
+
+// --- Files ---
+function formatBytes(bytes) {
+  if (bytes < 1024) return bytes + ' B';
+  if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+  if (bytes < 1073741824) return (bytes / 1048576).toFixed(1) + ' MB';
+  return (bytes / 1073741824).toFixed(2) + ' GB';
+}
+
+function formatDate(d) {
+  return new Date(d).toLocaleString('ko-KR', { year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit' });
+}
+
+async function loadFiles(reset) {
+  if (reset) {
+    filesNextToken = null;
+    document.getElementById('files-body').innerHTML = '';
+  }
+  const url = filesNextToken ? `/api/admin/files?token=${encodeURIComponent(filesNextToken)}` : '/api/admin/files';
+  const res = await api(url);
+  const data = await res.json();
+  const body = document.getElementById('files-body');
+  const info = document.getElementById('files-info');
+  const empty = document.getElementById('files-empty');
+  const loadMore = document.getElementById('files-load-more');
+
+  filesNextToken = data.nextToken;
+  loadMore.style.display = data.nextToken ? 'block' : 'none';
+
+  if (data.files.length === 0 && body.children.length === 0) {
+    empty.style.display = 'block';
+    info.textContent = '파일 없음';
+    return;
+  }
+  empty.style.display = 'none';
+
+  for (const file of data.files) {
+    const tr = document.createElement('tr');
+    const name = file.key;
+    tr.innerHTML = `
+      <td title="${file.publicUrl || ''}">${name}</td>
+      <td class="file-size">${formatBytes(file.size)}</td>
+      <td>${formatDate(file.lastModified)}</td>
+      <td><button class="del-btn" onclick="deleteFile('${name}')">삭제</button></td>
+    `;
+    body.appendChild(tr);
+  }
+
+  const total = body.children.length;
+  info.textContent = `${total}개 파일${data.nextToken ? ' (더 있음)' : ''}`;
+}
+
+async function deleteFile(key) {
+  if (!confirm(`"${key}" 파일을 삭제하시겠습니까?`)) return;
+  await api(`/api/admin/files/${key}`, { method: 'DELETE' });
+  loadFiles(true);
+}
+</script>
+</body>
+</html>
