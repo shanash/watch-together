@@ -18,6 +18,7 @@ try {
   BUILD_VERSION = execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
 } catch {}
 const BUILD_TIME = new Date().toISOString();
+const SERVER_START = Date.now();
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
@@ -261,7 +262,7 @@ function loadRooms() {
     }
     log.info('persist', `Loaded ${rooms.size} rooms from disk`);
   } catch {
-    // No saved data or parse error — start fresh
+    log.info('persist', 'No saved room data, starting fresh');
   }
 }
 
@@ -704,14 +705,54 @@ app.get('/:roomId([A-Za-z0-9_-]{6,})', (req, res) => {
   res.sendFile(join(__dirname, 'public', 'join.html'));
 });
 
+// --- Periodic Health Log ---
+const HEALTH_INTERVAL = 10 * 60 * 1000; // 10 minutes
+setInterval(() => {
+  const mem = process.memoryUsage();
+  log.info('health', 'Server status', {
+    uptimeMin: Math.round((Date.now() - SERVER_START) / 60000),
+    rooms: rooms.size,
+    connections: io.engine?.clientsCount || 0,
+    memMB: {
+      rss: Math.round(mem.rss / 1048576),
+      heap: Math.round(mem.heapUsed / 1048576),
+      heapTotal: Math.round(mem.heapTotal / 1048576),
+    },
+  });
+}, HEALTH_INTERVAL);
+
+// --- Crash Logging ---
+process.on('uncaughtException', (err) => {
+  log.error('crash', 'Uncaught exception', { error: err.message, stack: err.stack });
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  log.error('crash', 'Unhandled rejection', {
+    error: reason instanceof Error ? reason.message : String(reason),
+    stack: reason instanceof Error ? reason.stack : undefined,
+  });
+});
+
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
-  log.info('server', `Server started on port ${PORT}`);
+  const mem = process.memoryUsage();
+  log.info('server', `Server started on port ${PORT}`, {
+    version: BUILD_VERSION,
+    buildTime: BUILD_TIME,
+    nodeVersion: process.version,
+    memMB: Math.round(mem.rss / 1048576),
+    restoredRooms: rooms.size,
+  });
 });
 
 // --- Graceful Shutdown ---
 function gracefulShutdown(signal) {
-  log.info('server', `${signal} received, shutting down gracefully`);
+  log.info('server', `${signal} received, shutting down gracefully`, {
+    uptimeMin: Math.round((Date.now() - SERVER_START) / 60000),
+    rooms: rooms.size,
+    connections: io.engine?.clientsCount || 0,
+  });
 
   // Notify all connected clients before closing
   io.emit('server-restart');
