@@ -67,6 +67,39 @@ app.post('/api/validate-youtube', async (req, res) => {
   }
 });
 
+// --- Validate video URL ---
+app.post('/api/validate-url', async (req, res) => {
+  const { url } = req.body;
+  if (!url) return res.status(400).json({ valid: false, error: 'URL이 필요합니다.' });
+
+  try {
+    const parsed = new URL(url);
+    if (!['http:', 'https:'].includes(parsed.protocol)) {
+      return res.json({ valid: false, error: '유효하지 않은 URL입니다.' });
+    }
+
+    const resp = await fetch(url, { method: 'HEAD', signal: AbortSignal.timeout(8000) });
+    if (!resp.ok) {
+      return res.json({ valid: false, error: '접근할 수 없는 URL입니다.' });
+    }
+
+    const contentType = resp.headers.get('content-type') || '';
+    const ext = parsed.pathname.split('.').pop().toLowerCase();
+    const videoExts = ['mp4', 'webm', 'mkv', 'avi', 'mov', 'flv', 'm3u8'];
+
+    if (contentType.startsWith('video/') || contentType.includes('mpegurl') || videoExts.includes(ext)) {
+      return res.json({ valid: true });
+    }
+
+    return res.json({ valid: false, error: '영상 파일이 아닌 것 같습니다. (Content-Type: ' + contentType + ')' });
+  } catch (err) {
+    if (err.name === 'TimeoutError') {
+      return res.json({ valid: false, error: 'URL 확인 시간이 초과되었습니다.' });
+    }
+    return res.json({ valid: false, error: '유효하지 않은 URL입니다.' });
+  }
+});
+
 // --- Upload: Presigned URL ---
 const ALLOWED_EXTS = new Set(['.mp4', '.webm', '.mkv']);
 const ALLOWED_SUB_EXTS = new Set(['.smi', '.srt', '.vtt']);

@@ -748,27 +748,26 @@ modalUrlAddBtn.addEventListener('click', async () => {
   if (!url) return;
   const ytId = getYouTubeVideoId(url);
 
-  if (ytId) {
-    modalUrlAddBtn.disabled = true;
-    modalUrlAddBtn.textContent = '확인 중...';
-    try {
-      const res = await fetch('/api/validate-youtube', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ url }),
-      });
-      const result = await res.json();
-      if (!result.valid) {
-        showModalStatus(result.error, 'fail');
-        return;
-      }
-    } catch {
-      showModalStatus('YouTube 영상을 확인할 수 없습니다.', 'fail');
+  modalUrlAddBtn.disabled = true;
+  modalUrlAddBtn.textContent = '확인 중...';
+  try {
+    const endpoint = ytId ? '/api/validate-youtube' : '/api/validate-url';
+    const res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url }),
+    });
+    const result = await res.json();
+    if (!result.valid) {
+      showModalStatus(result.error, 'fail');
       return;
-    } finally {
-      modalUrlAddBtn.disabled = false;
-      modalUrlAddBtn.textContent = '추가';
     }
+  } catch {
+    showModalStatus('URL을 확인할 수 없습니다.', 'fail');
+    return;
+  } finally {
+    modalUrlAddBtn.disabled = false;
+    modalUrlAddBtn.textContent = '추가';
   }
   socket.emit('playlist-add', { url });
   modalUrlInput.value = '';
