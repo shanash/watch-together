@@ -7,6 +7,7 @@ import { Server } from 'socket.io';
 import { nanoid } from 'nanoid';
 import { fileURLToPath } from 'url';
 import { dirname, join, extname } from 'path';
+import { readFileSync, writeFileSync, mkdirSync } from 'fs';
 import { execSync } from 'child_process';
 import { generatePresignedUrl } from './r2.js';
 import log from './logger.js';
@@ -194,8 +195,77 @@ app.get('/api/logs', async (req, res) => {
   }
 });
 
-// In-memory room storage
+// --- Room Persistence ---
+const ROOMS_FILE = join(__dirname, 'data', 'rooms.json');
+const ROOM_EXPIRY = 24 * 60 * 60 * 1000; // 24 hours empty → delete
 const rooms = new Map();
+
+function saveRooms() {
+  const data = {};
+  for (const [id, room] of rooms) {
+    data[id] = {
+      playlist: room.playlist,
+      currentIndex: room.currentIndex,
+      playbackState: room.playbackState,
+      emptyAt: room.users.length === 0 ? (room.emptyAt || Date.now()) : null,
+    };
+  }
+  try {
+    mkdirSync(join(__dirname, 'data'), { recursive: true });
+    writeFileSync(ROOMS_FILE, JSON.stringify(data));
+  } catch (err) {
+    log.error('persist', 'Failed to save rooms', { error: err.message });
+  }
+}
+
+let saveTimer = null;
+function scheduleSave() {
+  if (saveTimer) return;
+  saveTimer = setTimeout(() => {
+    saveTimer = null;
+    saveRooms();
+  }, 2000);
+}
+
+function loadRooms() {
+  try {
+    const raw = readFileSync(ROOMS_FILE, 'utf-8');
+    const data = JSON.parse(raw);
+    const now = Date.now();
+    for (const [id, saved] of Object.entries(data)) {
+      // Skip rooms that have been empty longer than ROOM_EXPIRY
+      if (saved.emptyAt && now - saved.emptyAt >= ROOM_EXPIRY) {
+        log.info('persist', 'Skipped expired room', { roomId: id });
+        continue;
+      }
+      const room = {
+        playlist: saved.playlist || [],
+        currentIndex: saved.currentIndex || 0,
+        users: [],
+        playbackState: saved.playbackState || { currentTime: 0, isPlaying: false, updatedAt: now },
+        emptyAt: saved.emptyAt || null,
+        deleteTimeout: null,
+      };
+      rooms.set(id, room);
+      // Schedule cleanup for rooms that were already empty
+      if (room.emptyAt) {
+        const remaining = ROOM_EXPIRY - (now - room.emptyAt);
+        room.deleteTimeout = setTimeout(() => {
+          if (room.users.length === 0) {
+            rooms.delete(id);
+            scheduleSave();
+            log.info('room', 'Room deleted (expired after restart)', { roomId: id });
+          }
+        }, remaining);
+      }
+    }
+    log.info('persist', `Loaded ${rooms.size} rooms from disk`);
+  } catch {
+    // No saved data or parse error — start fresh
+  }
+}
+
+loadRooms();
 
 function generateRoomId() {
   return nanoid(6);
@@ -278,7 +348,30 @@ io.on('connection', (socket) => {
 
   // --- Create Room ---
   socket.on('create-room', async ({ nickname, videoUrl, subtitleUrl, requestedRoomId }) => {
-    const roomId = (requestedRoomId && !rooms.has(requestedRoomId)) ? requestedRoomId : generateRoomId();
+    // If the requested room already exists (e.g. persisted after restart), rejoin it
+    if (requestedRoomId && rooms.has(requestedRoomId)) {
+      const room = rooms.get(requestedRoomId);
+      if (room.deleteTimeout) {
+        clearTimeout(room.deleteTimeout);
+        room.deleteTimeout = null;
+      }
+      room.emptyAt = null;
+      const existing = room.users.find((u) => u.nickname === nickname);
+      if (existing) {
+        existing.id = socket.id;
+      } else {
+        room.users.push({ id: socket.id, nickname });
+      }
+      socket.join(requestedRoomId);
+      socket.data.roomId = requestedRoomId;
+      socket.data.nickname = nickname;
+      socket.emit('room-created', { roomId: requestedRoomId, playlist: room.playlist, currentIndex: room.currentIndex });
+      log.info('room', 'Host rejoined persisted room', { roomId: requestedRoomId, nickname });
+      scheduleSave();
+      return;
+    }
+
+    const roomId = requestedRoomId || generateRoomId();
     const playlist = [];
     if (videoUrl) {
       const title = await fetchVideoTitle(videoUrl);
@@ -301,6 +394,7 @@ io.on('connection', (socket) => {
 
     socket.emit('room-created', { roomId, playlist: room.playlist, currentIndex: 0 });
     log.info('room', 'Room created', { roomId, nickname, videoUrl });
+    scheduleSave();
   });
 
   // --- Join Room ---
@@ -317,6 +411,7 @@ io.on('connection', (socket) => {
       room.deleteTimeout = null;
       log.info('room', 'Room deletion cancelled (user rejoined)', { roomId, nickname });
     }
+    room.emptyAt = null;
 
     // Handle reconnection: update socket id if same nickname already exists
     const existing = room.users.find((u) => u.nickname === nickname);
@@ -343,6 +438,7 @@ io.on('connection', (socket) => {
       socket.to(roomId).emit('user-joined', { nickname });
     }
     log.info('room', 'User joined', { roomId, nickname, userCount: room.users.length, reconnect: !!existing });
+    scheduleSave();
   });
 
   // --- Sync Events (All participants) ---
@@ -357,6 +453,7 @@ io.on('connection', (socket) => {
       updatedAt: Date.now(),
     };
     socket.to(roomId).emit('sync-play', { currentTime });
+    scheduleSave();
   });
 
   socket.on('sync-pause', ({ currentTime }) => {
@@ -370,6 +467,7 @@ io.on('connection', (socket) => {
       updatedAt: Date.now(),
     };
     socket.to(roomId).emit('sync-pause', { currentTime });
+    scheduleSave();
   });
 
   socket.on('sync-seek', ({ currentTime }) => {
@@ -383,6 +481,7 @@ io.on('connection', (socket) => {
       updatedAt: Date.now(),
     };
     socket.to(roomId).emit('sync-seek', { currentTime });
+    scheduleSave();
   });
 
   socket.on('sync-rate', ({ rate }) => {
@@ -413,6 +512,7 @@ io.on('connection', (socket) => {
     room.playlist[index].subtitleUrl = subtitleUrl;
     io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
     log.info('room', 'Playlist subtitle updated', { roomId, nickname: socket.data.nickname, index, subtitleUrl });
+    scheduleSave();
   });
 
   // --- Playlist Events ---
@@ -427,6 +527,7 @@ io.on('connection', (socket) => {
     const title = clientTitle || await fetchVideoTitle(url);
     room.playlist.push({ url, title, addedBy: socket.data.nickname, subtitleUrl: subtitleUrl || null });
     io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
+    scheduleSave();
   });
 
   socket.on('playlist-remove', ({ index }) => {
@@ -444,6 +545,7 @@ io.on('connection', (socket) => {
       room.currentIndex--;
     }
     io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
+    scheduleSave();
   });
 
   socket.on('playlist-reorder', ({ fromIndex, toIndex }) => {
@@ -467,6 +569,7 @@ io.on('connection', (socket) => {
     }
 
     io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
+    scheduleSave();
   });
 
   socket.on('playlist-play', ({ index }) => {
@@ -477,6 +580,7 @@ io.on('connection', (socket) => {
     room.currentIndex = index;
     room.playbackState = { currentTime: 0, isPlaying: true, updatedAt: Date.now() };
     io.in(roomId).emit('playlist-switch', { url: room.playlist[index].url, index });
+    scheduleSave();
   });
 
   socket.on('video-ended', ({ index }) => {
@@ -492,6 +596,7 @@ io.on('connection', (socket) => {
     room.currentIndex = nextIndex;
     room.playbackState = { currentTime: 0, isPlaying: true, updatedAt: Date.now() };
     io.in(roomId).emit('playlist-switch', { url: room.playlist[nextIndex].url, index: nextIndex });
+    scheduleSave();
   });
 
   // --- Network Status ---
@@ -576,14 +681,16 @@ io.on('connection', (socket) => {
 
     // If no users left, schedule room deletion with grace period
     if (room.users.length === 0) {
-      const GRACE_PERIOD = 300000; // 5 minutes
-      log.info('room', 'Room empty, scheduled for deletion', { roomId, graceMs: GRACE_PERIOD });
+      room.emptyAt = Date.now();
+      log.info('room', 'Room empty, scheduled for deletion', { roomId, graceMs: ROOM_EXPIRY });
       room.deleteTimeout = setTimeout(() => {
         if (room.users.length === 0) {
           rooms.delete(roomId);
-          log.info('room', 'Room deleted (grace period expired)', { roomId });
+          scheduleSave();
+          log.info('room', 'Room deleted (expired)', { roomId });
         }
-      }, GRACE_PERIOD);
+      }, ROOM_EXPIRY);
+      scheduleSave();
       return;
     }
 
