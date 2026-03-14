@@ -657,6 +657,13 @@ copyCodeBtn.addEventListener('click', () => {
   });
 });
 
+// --- Leave Room ---
+document.getElementById('leave-room').addEventListener('click', () => {
+  if (!confirm('방을 나가시겠습니까?')) return;
+  socket.disconnect();
+  window.location.href = '/';
+});
+
 // === Fullscreen ===
 fullscreenBtn.addEventListener('click', () => {
   if (document.fullscreenElement) {
