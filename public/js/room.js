@@ -83,6 +83,7 @@ const modalVideoFile = document.getElementById('modal-video-file');
 const modalVideoLabel = document.getElementById('modal-video-label');
 const modalSubFile = document.getElementById('modal-sub-file');
 const modalSubLabel = document.getElementById('modal-sub-label');
+const modalFileTitle = document.getElementById('modal-file-title');
 const modalFileAddBtn = document.getElementById('modal-file-add');
 const modalUploadProgress = document.getElementById('modal-upload-progress');
 const modalProgressBar = document.getElementById('modal-progress-bar');
@@ -798,7 +799,7 @@ modalSubFile.addEventListener('change', () => {
 });
 
 // Modal: file upload
-async function performFileUpload(videoFile, subFile) {
+async function performFileUpload(videoFile, subFile, title) {
   const MAX_FILE_SIZE = 2 * 1024 * 1024 * 1024;
   if (videoFile.size > MAX_FILE_SIZE) {
     showModalStatus('파일 크기는 2GB 이하여야 합니다.', 'fail');
@@ -862,7 +863,8 @@ async function performFileUpload(videoFile, subFile) {
       }
     }
 
-    socket.emit('playlist-add', { url: publicUrl, subtitleUrl: subPublicUrl });
+    const finalTitle = title || videoFile.name.replace(/\.[^.]+$/, '');
+    socket.emit('playlist-add', { url: publicUrl, subtitleUrl: subPublicUrl, title: finalTitle });
 
     showModalStatus('추가 완료!', 'success');
     lastUploadVideoFile = null;
@@ -870,6 +872,7 @@ async function performFileUpload(videoFile, subFile) {
     modalFileRetry.hidden = true;
     modalVideoFile.value = '';
     modalSubFile.value = '';
+    modalFileTitle.value = '';
     modalVideoLabel.querySelector('span').textContent = '영상 파일 선택 (.mp4, .webm, .mkv)';
     modalSubLabel.querySelector('span').textContent = '자막 파일 선택 (.smi, .srt, .vtt) - 선택사항';
   } catch (err) {
@@ -889,12 +892,14 @@ modalFileAddBtn.addEventListener('click', async () => {
     showModalStatus('영상 파일을 선택하세요.', 'fail');
     return;
   }
-  await performFileUpload(videoFile, modalSubFile.files[0] || null);
+  const title = modalFileTitle.value.trim();
+  await performFileUpload(videoFile, modalSubFile.files[0] || null, title);
 });
 
 modalFileRetry.addEventListener('click', async () => {
   if (!lastUploadVideoFile) return;
-  await performFileUpload(lastUploadVideoFile, lastUploadSubFile);
+  const title = modalFileTitle.value.trim();
+  await performFileUpload(lastUploadVideoFile, lastUploadSubFile, title);
 });
 
 // === Chat ===

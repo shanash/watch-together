@@ -416,7 +416,7 @@ io.on('connection', (socket) => {
   });
 
   // --- Playlist Events ---
-  socket.on('playlist-add', async ({ url, subtitleUrl }) => {
+  socket.on('playlist-add', async ({ url, subtitleUrl, title: clientTitle }) => {
     const roomId = socket.data.roomId;
     const room = rooms.get(roomId);
     if (!room) return;
@@ -424,7 +424,7 @@ io.on('connection', (socket) => {
       socket.emit('error-msg', { message: '재생목록은 최대 100개까지 추가할 수 있습니다.' });
       return;
     }
-    const title = await fetchVideoTitle(url);
+    const title = clientTitle || await fetchVideoTitle(url);
     room.playlist.push({ url, title, addedBy: socket.data.nickname, subtitleUrl: subtitleUrl || null });
     io.in(roomId).emit('playlist-updated', { playlist: room.playlist, currentIndex: room.currentIndex });
   });
