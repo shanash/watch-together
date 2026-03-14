@@ -26,15 +26,19 @@
     .tab-panel { display: none; background: #1a1a1a; border: 1px solid #333; border-radius: 0 8px 8px 8px; padding: 20px; }
     .tab-panel.active { display: block; }
 
-    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; gap: 8px; }
     .toolbar .info { color: #888; font-size: 0.9rem; }
+    .toolbar-right { display: flex; gap: 6px; align-items: center; }
     .refresh-btn { padding: 6px 14px; border: 1px solid #444; border-radius: 6px; background: transparent; color: #e0e0e0; cursor: pointer; font-size: 0.85rem; }
     .refresh-btn:hover { background: #333; }
+    .bulk-del-btn { padding: 6px 14px; border: 1px solid #ff6b6b; border-radius: 6px; background: transparent; color: #ff6b6b; cursor: pointer; font-size: 0.85rem; display: none; }
+    .bulk-del-btn:hover { background: #3a1a1a; }
 
     table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
     th { text-align: left; padding: 10px 12px; border-bottom: 1px solid #333; color: #888; font-weight: 500; }
     td { padding: 10px 12px; border-bottom: 1px solid #222; }
     tr:hover { background: #222; }
+    th input[type="checkbox"], td input[type="checkbox"] { width: 16px; height: 16px; cursor: pointer; accent-color: #4a9eff; }
 
     .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 0.8rem; }
     .badge-active { background: #1a3a2a; color: #4ade80; }
@@ -75,11 +79,14 @@
   <div class="tab-panel active" id="tab-rooms">
     <div class="toolbar">
       <span class="info" id="rooms-info">로딩 중...</span>
-      <button class="refresh-btn" onclick="loadRooms()">새로고침</button>
+      <div class="toolbar-right">
+        <button class="bulk-del-btn" id="rooms-bulk-del" onclick="bulkDeleteRooms()">선택 삭제</button>
+        <button class="refresh-btn" onclick="loadRooms()">새로고침</button>
+      </div>
     </div>
     <table>
       <thead>
-        <tr><th>방 ID</th><th>사용자</th><th>재생목록</th><th>상태</th><th></th></tr>
+        <tr><th><input type="checkbox" id="rooms-select-all"></th><th>방 ID</th><th>사용자</th><th>재생목록</th><th>상태</th><th></th></tr>
       </thead>
       <tbody id="rooms-body"></tbody>
     </table>
@@ -90,11 +97,14 @@
   <div class="tab-panel" id="tab-files">
     <div class="toolbar">
       <span class="info" id="files-info">로딩 중...</span>
-      <button class="refresh-btn" onclick="loadFiles(true)">새로고침</button>
+      <div class="toolbar-right">
+        <button class="bulk-del-btn" id="files-bulk-del" onclick="bulkDeleteFiles()">선택 삭제</button>
+        <button class="refresh-btn" onclick="loadFiles(true)">새로고침</button>
+      </div>
     </div>
     <table>
       <thead>
-        <tr><th>파일명</th><th>크기</th><th>업로드일</th><th></th></tr>
+        <tr><th><input type="checkbox" id="files-select-all"></th><th>파일명</th><th>크기</th><th>업로드일</th><th></th></tr>
       </thead>
       <tbody id="files-body"></tbody>
     </table>
@@ -149,6 +159,30 @@ function api(path, opts = {}) {
   });
 }
 
+// --- Selection helpers ---
+function updateBulkBtn(bodyId, btnId) {
+  const checked = document.querySelectorAll(`#${bodyId} input[type="checkbox"]:checked`).length;
+  const btn = document.getElementById(btnId);
+  if (checked > 0) {
+    btn.style.display = 'inline-block';
+    btn.textContent = `선택 삭제 (${checked})`;
+  } else {
+    btn.style.display = 'none';
+  }
+}
+
+function setupSelectAll(selectAllId, bodyId, btnId) {
+  document.getElementById(selectAllId).addEventListener('change', (e) => {
+    document.querySelectorAll(`#${bodyId} input[type="checkbox"]`).forEach((cb) => {
+      cb.checked = e.target.checked;
+    });
+    updateBulkBtn(bodyId, btnId);
+  });
+}
+
+setupSelectAll('rooms-select-all', 'rooms-body', 'rooms-bulk-del');
+setupSelectAll('files-select-all', 'files-body', 'files-bulk-del');
+
 // --- Rooms ---
 async function loadRooms() {
   const res = await api('/api/admin/rooms');
@@ -157,6 +191,8 @@ async function loadRooms() {
   const info = document.getElementById('rooms-info');
   const empty = document.getElementById('rooms-empty');
 
+  document.getElementById('rooms-select-all').checked = false;
+  document.getElementById('rooms-bulk-del').style.display = 'none';
   info.textContent = `총 ${rooms.length}개 방`;
   body.innerHTML = '';
 
@@ -175,12 +211,14 @@ async function loadRooms() {
     const users = room.users.length > 0 ? room.users.join(', ') : '-';
 
     tr.innerHTML = `
+      <td><input type="checkbox" data-room-id="${room.roomId}"></td>
       <td><strong>${room.roomId}</strong></td>
       <td>${users}</td>
       <td>${room.playlistCount}개</td>
       <td>${statusBadge}</td>
       <td><button class="del-btn" onclick="deleteRoom('${room.roomId}')">삭제</button></td>
     `;
+    tr.querySelector('input[type="checkbox"]').addEventListener('change', () => updateBulkBtn('rooms-body', 'rooms-bulk-del'));
     body.appendChild(tr);
   }
 }
@@ -188,6 +226,15 @@ async function loadRooms() {
 async function deleteRoom(roomId) {
   if (!confirm(`방 "${roomId}"를 삭제하시겠습니까? 접속 중인 사용자가 퇴장됩니다.`)) return;
   await api(`/api/admin/rooms/${roomId}`, { method: 'DELETE' });
+  loadRooms();
+}
+
+async function bulkDeleteRooms() {
+  const checked = document.querySelectorAll('#rooms-body input[type="checkbox"]:checked');
+  const ids = [...checked].map((cb) => cb.dataset.roomId);
+  if (ids.length === 0) return;
+  if (!confirm(`${ids.length}개 방을 삭제하시겠습니까? 접속 중인 사용자가 퇴장됩니다.`)) return;
+  await Promise.all(ids.map((id) => api(`/api/admin/rooms/${id}`, { method: 'DELETE' })));
   loadRooms();
 }
 
@@ -207,6 +254,8 @@ async function loadFiles(reset) {
   if (reset) {
     filesNextToken = null;
     document.getElementById('files-body').innerHTML = '';
+    document.getElementById('files-select-all').checked = false;
+    document.getElementById('files-bulk-del').style.display = 'none';
   }
   const url = filesNextToken ? `/api/admin/files?token=${encodeURIComponent(filesNextToken)}` : '/api/admin/files';
   const res = await api(url);
@@ -230,11 +279,13 @@ async function loadFiles(reset) {
     const tr = document.createElement('tr');
     const name = file.key;
     tr.innerHTML = `
+      <td><input type="checkbox" data-file-key="${name}"></td>
       <td title="${file.publicUrl || ''}">${name}</td>
       <td class="file-size">${formatBytes(file.size)}</td>
       <td>${formatDate(file.lastModified)}</td>
       <td><button class="del-btn" onclick="deleteFile('${name}')">삭제</button></td>
     `;
+    tr.querySelector('input[type="checkbox"]').addEventListener('change', () => updateBulkBtn('files-body', 'files-bulk-del'));
     body.appendChild(tr);
   }
 
@@ -245,6 +296,15 @@ async function loadFiles(reset) {
 async function deleteFile(key) {
   if (!confirm(`"${key}" 파일을 삭제하시겠습니까?`)) return;
   await api(`/api/admin/files/${key}`, { method: 'DELETE' });
+  loadFiles(true);
+}
+
+async function bulkDeleteFiles() {
+  const checked = document.querySelectorAll('#files-body input[type="checkbox"]:checked');
+  const keys = [...checked].map((cb) => cb.dataset.fileKey);
+  if (keys.length === 0) return;
+  if (!confirm(`${keys.length}개 파일을 삭제하시겠습니까?`)) return;
+  await Promise.all(keys.map((key) => api(`/api/admin/files/${key}`, { method: 'DELETE' })));
   loadFiles(true);
 }
 </script>
