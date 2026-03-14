@@ -48,6 +48,11 @@ socket.io.on('reconnect_failed', () => {
   statusMsg.textContent = '서버에 연결할 수 없습니다. 페이지를 새로고침하세요.';
 });
 
+socket.on('server-restart', () => {
+  console.log('[WatchTogether] Server restart announced');
+  statusMsg.textContent = '서버 업데이트 중... 잠시 후 자동 재연결됩니다.';
+});
+
 socket.on('disconnect', (reason) => {
   console.warn(`[WatchTogether] Disconnected: ${reason}`);
   if (reason === 'io server disconnect') {

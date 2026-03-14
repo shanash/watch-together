@@ -707,10 +707,32 @@ app.get('/:roomId([A-Za-z0-9_-]{6,})', (req, res) => {
 const PORT = process.env.PORT || 3000;
 server.listen(PORT, () => {
   log.info('server', `Server started on port ${PORT}`);
-
-  // Prevent Render free tier sleep (pings every 14 minutes)
-  const KEEP_ALIVE_INTERVAL = 14 * 60 * 1000;
-  setInterval(() => {
-    fetch(`http://localhost:${PORT}/api/version`).catch(() => {});
-  }, KEEP_ALIVE_INTERVAL);
 });
+
+// --- Graceful Shutdown ---
+function gracefulShutdown(signal) {
+  log.info('server', `${signal} received, shutting down gracefully`);
+
+  // Notify all connected clients before closing
+  io.emit('server-restart');
+
+  // Save room state to disk
+  saveRooms();
+
+  // Force exit after 5s (Render allows 10s after SIGTERM)
+  const forceExit = setTimeout(() => {
+    log.error('server', 'Forced shutdown (timeout)');
+    process.exit(1);
+  }, 5000);
+  forceExit.unref();
+
+  io.close(() => {
+    server.close(() => {
+      log.info('server', 'Shutdown complete');
+      process.exit(0);
+    });
+  });
+}
+
+process.on('SIGTERM', () => gracefulShutdown('SIGTERM'));
+process.on('SIGINT', () => gracefulShutdown('SIGINT'));
