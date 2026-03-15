@@ -368,7 +368,7 @@ io.on('connection', (socket) => {
   });
 
   // --- Create Room ---
-  socket.on('create-room', async ({ nickname, videoUrl, subtitleUrl, requestedRoomId, restorePlaylist, restoreIndex }) => {
+  socket.on('create-room', async ({ nickname, videoUrl, subtitleUrl, requestedRoomId, restorePlaylist, restoreIndex, restorePlaybackState }) => {
     // If the requested room already exists (e.g. persisted after restart), rejoin it
     if (requestedRoomId && rooms.has(requestedRoomId)) {
       const room = rooms.get(requestedRoomId);
@@ -416,8 +416,8 @@ io.on('connection', (socket) => {
       currentIndex: startIndex,
       users: [{ id: socket.id, nickname }],
       playbackState: {
-        currentTime: 0,
-        isPlaying: false,
+        currentTime: (restorePlaybackState && typeof restorePlaybackState.currentTime === 'number') ? restorePlaybackState.currentTime : 0,
+        isPlaying: (restorePlaybackState && restorePlaybackState.isPlaying) || false,
         updatedAt: Date.now(),
       },
     };
@@ -426,7 +426,7 @@ io.on('connection', (socket) => {
     socket.data.roomId = roomId;
     socket.data.nickname = nickname;
 
-    socket.emit('room-created', { roomId, playlist: room.playlist, currentIndex: 0 });
+    socket.emit('room-created', { roomId, playlist: room.playlist, currentIndex: startIndex });
     log.info('room', 'Room created', { roomId, nickname, videoUrl });
     scheduleSave();
   });

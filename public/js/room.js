@@ -613,6 +613,10 @@ socket.on('error-msg', ({ message, fatal }) => {
         requestedRoomId: roomId,
         restorePlaylist: savedPlaylist,
         restoreIndex: savedIndex,
+        restorePlaybackState: player ? {
+          currentTime: player.currentTime || 0,
+          isPlaying: !player.paused,
+        } : null,
       });
       return;
     }
